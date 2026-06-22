@@ -26,6 +26,7 @@ const createTransactionSchema = Joi.object({
   }),
   description: Joi.string().max(500).allow('', null),
   reference: Joi.string().max(100).allow('', null),
+  recurringType: Joi.string().valid('ONE_TIME', 'WEEKLY', 'MONTHLY').default('ONE_TIME'),
   date: Joi.date().iso().default(() => new Date()),
 });
 
@@ -50,10 +51,20 @@ const updateExpenseSchema = Joi.object({
   date: Joi.date().iso(),
 }).min(1);
 
+const updateTransactionSchema = Joi.object({
+  type: Joi.string().valid('INCOME', 'EXPENSE', 'DEPOSIT'),
+  amount: Joi.number().positive().precision(2),
+  description: Joi.string().max(500).allow('', null),
+  reference: Joi.string().max(100).allow('', null),
+  recurringType: Joi.string().valid('ONE_TIME', 'WEEKLY', 'MONTHLY'),
+  date: Joi.date().iso(),
+}).min(1);
+
 module.exports = {
   createTreasurySchema,
   updateTreasurySchema,
   createTransactionSchema,
   createExpenseSchema,
   updateExpenseSchema,
+  updateTransactionSchema,
 };

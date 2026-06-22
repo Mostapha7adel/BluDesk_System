@@ -96,6 +96,26 @@ class InternalProjectsService {
     });
   }
 
+  async updateStatus(id, status) {
+    const project = await prisma.internalProject.findUnique({ where: { id } });
+    if (!project) throw new AppError('Internal project not found', 404);
+
+    return prisma.internalProject.update({
+      where: { id },
+      data: { status },
+    });
+  }
+
+  async updateProgress(id, progress) {
+    const project = await prisma.internalProject.findUnique({ where: { id } });
+    if (!project) throw new AppError('Internal project not found', 404);
+
+    return prisma.internalProject.update({
+      where: { id },
+      data: { progress },
+    });
+  }
+
   async delete(id) {
     const project = await prisma.internalProject.findUnique({ where: { id } });
     if (!project) throw new AppError('Internal project not found', 404);

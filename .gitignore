@@ -4,5 +4,13 @@ dist/
 src/uploads/*
 !src/uploads/.gitkeep
 backups/
+mysql-data/
 *.log
 .DS_Store
+*.zip
+_zipcheck*/
+deploy/
+k6-*.js
+k6-*.json
+nginx-config.txt
+*.sql

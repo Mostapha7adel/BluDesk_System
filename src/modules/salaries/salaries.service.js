@@ -49,8 +49,50 @@ class SalariesService {
     });
     if (existing) throw new AppError('Salary already exists for this employee in this month/year', 409);
 
+    const amount = parseFloat(data.amount);
+    const transportAllowance = parseFloat(data.transportAllowance || 0);
+    const bonus = parseFloat(data.bonus || 0);
+    const loan = parseFloat(data.loan || 0);
+    const deduction = parseFloat(data.deduction || 0);
+    const totalAmount = amount + transportAllowance + bonus + loan - deduction;
+
     return prisma.salaryPayment.create({
-      data: { employeeId: data.employeeId, amount: data.amount, month: data.month, year: data.year, notes: data.notes },
+      data: {
+        employeeId: data.employeeId,
+        amount,
+        transportAllowance,
+        bonus,
+        loan,
+        deduction,
+        totalAmount,
+        month: data.month,
+        year: data.year,
+        notes: data.notes,
+      },
+      include: { employee: { select: { id: true, name: true, employeeNumber: true, position: true, department: true, salary: true, image: true } } },
+    });
+  }
+
+  async update(id, data) {
+    const payment = await prisma.salaryPayment.findUnique({ where: { id } });
+    if (!payment) throw new AppError('Salary payment not found', 404);
+    if (payment.status === 'PAID' || payment.status === 'CANCELLED') {
+      throw new AppError('Cannot edit a paid or cancelled salary', 400);
+    }
+
+    const amount = data.amount !== undefined ? parseFloat(data.amount) : parseFloat(payment.amount);
+    const transportAllowance = data.transportAllowance !== undefined ? parseFloat(data.transportAllowance) : parseFloat(payment.transportAllowance || 0);
+    const bonus = data.bonus !== undefined ? parseFloat(data.bonus) : parseFloat(payment.bonus || 0);
+    const loan = data.loan !== undefined ? parseFloat(data.loan) : parseFloat(payment.loan || 0);
+    const deduction = data.deduction !== undefined ? parseFloat(data.deduction) : parseFloat(payment.deduction || 0);
+    const totalAmount = amount + transportAllowance + bonus + loan - deduction;
+
+    const updateData = { amount, transportAllowance, bonus, loan, deduction, totalAmount };
+    if (data.notes !== undefined) updateData.notes = data.notes;
+
+    return prisma.salaryPayment.update({
+      where: { id },
+      data: updateData,
       include: { employee: { select: { id: true, name: true, employeeNumber: true, position: true, department: true, salary: true, image: true } } },
     });
   }
@@ -65,7 +107,7 @@ class SalariesService {
     const VALID_TRANSITIONS = {
       PENDING: ['APPROVED', 'CANCELLED'],
       APPROVED: ['PAID', 'CANCELLED'],
-      PAID: [],
+      PAID: ['CANCELLED'],
       CANCELLED: [],
     };
 
@@ -85,15 +127,16 @@ class SalariesService {
         const treasury = await tx.treasury.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
         if (!treasury) throw new AppError('No active treasury found', 400);
 
-        const newBalance = parseFloat(treasury.balance) - parseFloat(payment.amount);
+        const totalAmount = parseFloat(payment.totalAmount);
+        const newBalance = parseFloat(treasury.balance) - totalAmount;
         if (newBalance < 0) throw new AppError('Insufficient treasury balance to pay salary', 400);
 
         await tx.financeTransaction.create({
           data: {
             treasuryId: treasury.id,
             type: 'EXPENSE',
-            amount: payment.amount,
-            description: `Salary payment - ${payment.employee?.name || `Employee #${payment.employeeId}`} - ${payment.month}/${payment.year}`,
+            amount: totalAmount,
+            description: `Salary - ${payment.employee?.name || `Employee #${payment.employeeId}`} - ${payment.month}/${payment.year}`,
             reference: `SAL-${payment.id}`,
             date: new Date(),
             createdBy: userId,
@@ -106,6 +149,46 @@ class SalariesService {
         });
 
         cache.del('finance:summary:{}');
+        return tx.salaryPayment.update({
+          where: { id },
+          data: updateData,
+          include: { employee: { select: { id: true, name: true, employeeNumber: true, position: true, department: true, salary: true, image: true } } },
+        });
+      });
+    }
+
+    if (data.status === 'CANCELLED') {
+      return prisma.$transaction(async (tx) => {
+        updateData.cancelledAt = new Date();
+        updateData.cancelledBy = userId;
+
+        if (payment.status === 'PAID') {
+          const treasury = await tx.treasury.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
+          if (!treasury) throw new AppError('No active treasury found', 400);
+
+          const totalAmount = parseFloat(payment.totalAmount);
+          const newBalance = parseFloat(treasury.balance) + totalAmount;
+
+          await tx.financeTransaction.create({
+            data: {
+              treasuryId: treasury.id,
+              type: 'INCOME',
+              amount: totalAmount,
+              description: `Salary reversal (cancelled) - ${payment.employee?.name || `Employee #${payment.employeeId}`} - ${payment.month}/${payment.year}`,
+              reference: `SAL-REV-${payment.id}`,
+              date: new Date(),
+              createdBy: userId,
+            },
+          });
+
+          await tx.treasury.update({
+            where: { id: treasury.id },
+            data: { balance: newBalance },
+          });
+
+          cache.del('finance:summary:{}');
+        }
+
         return tx.salaryPayment.update({
           where: { id },
           data: updateData,

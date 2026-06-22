@@ -55,6 +55,33 @@ class ProjectsController {
       next(error);
     }
   }
+
+  async updateStatus(req, res, next) {
+    try {
+      const project = await projectsService.updateStatus(parseInt(req.params.id), req.body.status, req.user.id);
+      return ApiResponse.success(res, project, 'Project status updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async addInstallment(req, res, next) {
+    try {
+      const installment = await projectsService.addInstallment(parseInt(req.params.id), req.body);
+      return ApiResponse.created(res, installment, 'Payment installment added successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getInstallments(req, res, next) {
+    try {
+      const result = await projectsService.getInstallments(parseInt(req.params.id));
+      return ApiResponse.success(res, result, 'Installments fetched successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new ProjectsController();

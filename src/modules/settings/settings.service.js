@@ -82,7 +82,10 @@ class SettingsService {
     const filepath = path.join(backupDir, filename);
 
     return new Promise((resolve, reject) => {
-      const cmd = `"C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin\\mysqldump" -u${dbConfig.user} -p${dbConfig.password} -h${dbConfig.host} -P${dbConfig.port} ${dbConfig.database} > "${filepath}"`;
+      const mysqldump = process.platform === 'win32'
+        ? '"C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin\\mysqldump"'
+        : 'mysqldump';
+      const cmd = `${mysqldump} -u${dbConfig.user} -p${dbConfig.password} -h${dbConfig.host} -P${dbConfig.port} ${dbConfig.database} > "${filepath}"`;
       exec(cmd, { maxBuffer: 1024 * 1024 * 200 }, (error, stdout, stderr) => {
         if (error) return reject(error);
         resolve({ filepath, filename, size: fs.statSync(filepath).size });

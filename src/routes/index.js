@@ -27,13 +27,10 @@ router.use('/audit-logs', auditLogsRoutes);
 router.use('/salaries', salariesRoutes);
 router.use('/settings', settingsRoutes);
 
-// Health check
 router.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'BlueDesk ERP API is running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    message: 'API is running',
   });
 });
 

@@ -47,6 +47,24 @@ class InternalProjectsController {
     }
   }
 
+  async updateStatus(req, res, next) {
+    try {
+      const project = await internalProjectsService.updateStatus(parseInt(req.params.id), req.body.status);
+      return ApiResponse.success(res, project, 'Internal project status updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateProgress(req, res, next) {
+    try {
+      const project = await internalProjectsService.updateProgress(parseInt(req.params.id), req.body.progress);
+      return ApiResponse.success(res, project, 'Internal project progress updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async addNote(req, res, next) {
     try {
       const note = await internalProjectsService.addNote(

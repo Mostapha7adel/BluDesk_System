@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const Joi = require('joi');
 const projectsController = require('./projects.controller');
 const { validate, validateParams } = require('../../middlewares/validate');
 const authenticate = require('../../middlewares/auth');
@@ -20,5 +21,8 @@ router
   .delete(validateParams(paramId), authorize('projects.delete'), auditLog('DELETE'), projectsController.delete);
 
 router.get('/:id/status-history', validateParams(paramId), authorize('projects.read'), projectsController.getStatusHistory);
+router.patch('/:id/status', validateParams(paramId), authorize('projects.update'), validate(Joi.object({ status: Joi.string().valid('NEW', 'ANALYSIS', 'DESIGN', 'DEVELOPMENT', 'TESTING', 'COMPLETED', 'CANCELLED').required() })), auditLog('UPDATE'), projectsController.updateStatus);
+router.post('/:id/installments', validateParams(paramId), authorize('projects.update'), validate(Joi.object({ amount: Joi.number().positive().precision(2).required(), date: Joi.date().iso(), notes: Joi.string().max(500).allow('', null) })), auditLog('CREATE'), projectsController.addInstallment);
+router.get('/:id/installments', validateParams(paramId), authorize('projects.read'), projectsController.getInstallments);
 
 module.exports = router;

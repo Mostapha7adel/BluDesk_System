@@ -58,6 +58,15 @@ class FinanceController {
     }
   }
 
+  async updateTransaction(req, res, next) {
+    try {
+      const transaction = await financeService.updateTransaction(parseInt(req.params.id), req.body, req.user.id);
+      return ApiResponse.success(res, transaction, 'Transaction updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async cancelTransaction(req, res, next) {
     try {
       const transaction = await financeService.cancelTransaction(parseInt(req.params.id), req.user.id);

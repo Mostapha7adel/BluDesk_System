@@ -2,22 +2,24 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Drawer, List, ListItemButton, ListItemIcon, ListItemText, Box, Typography, IconButton, useMediaQuery, useTheme } from '@mui/material';
 import {
-  LayoutDashboard, Users, Briefcase, FolderGit2, Wallet, DollarSign, Shield, History, Settings, X, ChevronLeft, ChevronRight
+  LayoutDashboard, Users, Briefcase, FolderGit2, Wallet, DollarSign, Shield, History, Settings, X, ChevronLeft, ChevronRight, BarChart3
 } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { selectIsRtl } from '../../store/directionSlice';
+import { selectUser } from '../../store/authSlice';
 import ar from '../../utils/translations';
 
 const NAV_ITEMS = [
-  { labelKey: 'nav.dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { labelKey: 'nav.employees', path: '/employees', icon: Users },
-  { labelKey: 'nav.projects', path: '/projects', icon: Briefcase },
-  { labelKey: 'nav.internalProjects', path: '/internal-projects', icon: FolderGit2 },
-  { labelKey: 'nav.finance', path: '/finance', icon: Wallet },
-  { labelKey: 'nav.salaries', path: '/salaries', icon: DollarSign },
-  { labelKey: 'nav.roles', path: '/permissions', icon: Shield },
-  { labelKey: 'nav.auditLogs', path: '/audit-logs', icon: History },
-  { labelKey: 'nav.settings', path: '/settings', icon: Settings },
+  { labelKey: 'nav.dashboard', path: '/dashboard', icon: LayoutDashboard, perm: null },
+  { labelKey: 'nav.employees', path: '/employees', icon: Users, perm: 'employees.read' },
+  { labelKey: 'nav.projects', path: '/projects', icon: Briefcase, perm: 'projects.read' },
+  { labelKey: 'nav.internalProjects', path: '/internal-projects', icon: FolderGit2, perm: 'internal_projects.read' },
+  { labelKey: 'nav.finance', path: '/finance', icon: Wallet, perm: 'finance.read' },
+  { labelKey: 'nav.reports', path: '/reports', icon: BarChart3, perm: 'finance.generate_report' },
+  { labelKey: 'nav.salaries', path: '/salaries', icon: DollarSign, perm: 'salaries.read' },
+  { labelKey: 'nav.roles', path: '/permissions', icon: Shield, perm: 'roles.read' },
+  { labelKey: 'nav.auditLogs', path: '/audit-logs', icon: History, perm: 'audit_logs.read' },
+  { labelKey: 'nav.settings', path: '/settings', icon: Settings, perm: 'settings.read' },
 ];
 
 const DRAWER_WIDTH = 240;
@@ -28,7 +30,11 @@ export default function Sidebar({ open, onClose, collapsed, onToggle }) {
   const location = useLocation();
   const theme = useTheme();
   const isRtl = useSelector(selectIsRtl);
+  const user = useSelector(selectUser);
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const perms = user?.permissions || [];
+  const isSuperAdmin = user?.role?.slug === 'super_admin';
+  const visibleItems = NAV_ITEMS.filter(item => !item.perm || isSuperAdmin || perms.includes(item.perm));
 
   const t = (key) => {
     const keys = key.split('.');
@@ -74,7 +80,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggle }) {
       )}
 
       <List sx={{ px: collapsed ? 1 : 1.5, flex: 1 }}>
-        {NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
           const Icon = item.icon;
           return (

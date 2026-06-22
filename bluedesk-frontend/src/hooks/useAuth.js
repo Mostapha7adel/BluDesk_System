@@ -3,7 +3,7 @@ import { setCredentials, logout as logoutAction, selectAuth } from '../store/aut
 import { loginApi } from '../api/auth';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api/v1';
+const API_URL = '/api/v1';
 
 export const useAuth = () => {
   const dispatch = useDispatch();
@@ -11,8 +11,8 @@ export const useAuth = () => {
 
   const login = async (email, password) => {
     const response = await loginApi({ email, password });
-    const { user, accessToken } = response.data.data;
-    dispatch(setCredentials({ user, accessToken }));
+    const { user, accessToken, permissions } = response.data.data;
+    dispatch(setCredentials({ user, accessToken, permissions }));
     return response.data;
   };
 

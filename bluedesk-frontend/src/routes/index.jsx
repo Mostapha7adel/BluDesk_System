@@ -15,6 +15,7 @@ const Permissions = lazy(() => import('../pages/permissions/Permissions'));
 const AuditLogs = lazy(() => import('../pages/audit-logs/AuditLogs'));
 const Salaries = lazy(() => import('../pages/salaries/Salaries'));
 const Settings = lazy(() => import('../pages/settings/Settings'));
+const Reports = lazy(() => import('../pages/reports/Reports'));
 
 const PageLoader = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -48,6 +49,7 @@ export default function AppRoutes() {
       <Route path="/audit-logs" element={<ProtectedRoute><MainLayout><Suspense fallback={<PageLoader />}><AuditLogs /></Suspense></MainLayout></ProtectedRoute>} />
       <Route path="/salaries" element={<ProtectedRoute><MainLayout><Suspense fallback={<PageLoader />}><Salaries /></Suspense></MainLayout></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><MainLayout><Suspense fallback={<PageLoader />}><Settings /></Suspense></MainLayout></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute><MainLayout><Suspense fallback={<PageLoader />}><Reports /></Suspense></MainLayout></ProtectedRoute>} />
     </Routes>
   );
 }

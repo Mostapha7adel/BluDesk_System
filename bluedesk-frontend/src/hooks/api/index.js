@@ -2,14 +2,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getEmployeesApi, createEmployeeApi, updateEmployeeApi, deleteEmployeeApi, archiveEmployeeApi, restoreEmployeeApi } from '../../api/employees';
 import { getProjectsApi, createProjectApi, updateProjectApi, deleteProjectApi } from '../../api/projects';
 import { getInternalProjectsApi, createInternalProjectApi, updateInternalProjectApi, deleteInternalProjectApi } from '../../api/internalProjects';
-import { getTreasuriesApi, createTreasuryApi, getTransactionsApi, createTransactionApi, getFinancialReportApi, cancelTransactionApi } from '../../api/finance';
-import { getRolesApi, getRolePermissionsApi, assignPermissionsApi, deleteRoleApi, createRoleApi } from '../../api/roles';
+import { getTreasuriesApi, createTreasuryApi, getTransactionsApi, createTransactionApi, getFinancialReportApi, cancelTransactionApi, updateTransactionApi } from '../../api/finance';
+import { getRolesApi, getRolePermissionsApi, assignPermissionsApi, removePermissionApi, deleteRoleApi, createRoleApi } from '../../api/roles';
 import { getPermissionsApi } from '../../api/permissions';
 import { getAuditLogsApi } from '../../api/auditLogs';
 import { getProfileApi } from '../../api/auth';
-import { getSalariesApi, createSalaryApi, approveSalaryApi, paySalaryApi, cancelSalaryApi, getPendingSalariesApi } from '../../api/salaries';
+import { getSalariesApi, createSalaryApi, approveSalaryApi, paySalaryApi, cancelSalaryApi, updateSalaryApi, getPendingSalariesApi } from '../../api/salaries';
 import { getUsersApi, createUserApi, updateUserApi, deleteUserApi } from '../../api/users';
 import { getSystemHealthApi, createBackupApi } from '../../api/settings';
+import { getExpensesApi, getMonthlyReportApi } from '../../api/expenses';
 
 const unwrapData = (res) => res.data.data;
 const unwrapPaginated = (res) => ({ data: res.data.data, pagination: res.data.pagination, summary: res.data.summary });
@@ -153,6 +154,17 @@ export function useCreateTransaction() {
   });
 }
 
+export function useUpdateTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => updateTransactionApi(id, data).then(unwrapData),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['financialReport'] });
+    },
+  });
+}
+
 export function useCancelTransaction() {
   const qc = useQueryClient();
   return useMutation({
@@ -190,6 +202,14 @@ export function useAssignPermissions() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, permissionIds }) => assignPermissionsApi(id, permissionIds).then(unwrapData),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rolePermissions'] }),
+  });
+}
+
+export function useRemovePermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleId, permissionId }) => removePermissionApi(roleId, permissionId).then(unwrapData),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rolePermissions'] }),
   });
 }
@@ -262,11 +282,19 @@ export function usePaySalary() {
   });
 }
 
+export function useUpdateSalary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => updateSalaryApi(id, data).then(unwrapData),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['salaries'] }); },
+  });
+}
+
 export function useCancelSalary() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, notes }) => cancelSalaryApi(id, notes).then(unwrapData),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['salaries'] }); qc.invalidateQueries({ queryKey: ['pendingSalaries'] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['salaries'] }); qc.invalidateQueries({ queryKey: ['pendingSalaries'] }); qc.invalidateQueries({ queryKey: ['transactions'] }); qc.invalidateQueries({ queryKey: ['financialReport'] }); },
   });
 }
 
@@ -319,5 +347,19 @@ export function useSystemHealth() {
 export function useCreateBackup() {
   return useMutation({
     mutationFn: () => createBackupApi(),
+  });
+}
+
+export function useExpenses(params) {
+  return useQuery({
+    queryKey: ['expenses', params],
+    queryFn: () => getExpensesApi(params).then(unwrapPaginated),
+  });
+}
+
+export function useMonthlyReport(params) {
+  return useQuery({
+    queryKey: ['monthlyReport', params],
+    queryFn: () => getMonthlyReportApi(params).then(unwrapData),
   });
 }

@@ -52,11 +52,17 @@ CREATE TABLE `User` (
     `refreshToken` TEXT NULL,
     `resetToken` VARCHAR(255) NULL,
     `resetTokenExp` DATETIME(3) NULL,
+    `loginAttempts` INTEGER NOT NULL DEFAULT 0,
+    `lockUntil` DATETIME(3) NULL,
     `deletedAt` DATETIME(3) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `User_email_key`(`email`),
+    UNIQUE INDEX `User_phone_key`(`phone`),
+    INDEX `User_deletedAt_idx`(`deletedAt`),
+    INDEX `User_status_idx`(`status`),
+    INDEX `User_roleId_idx`(`roleId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -72,6 +78,7 @@ CREATE TABLE `RefreshToken` (
     UNIQUE INDEX `RefreshToken_token_key`(`token`),
     INDEX `RefreshToken_userId_idx`(`userId`),
     INDEX `RefreshToken_token_idx`(`token`),
+    INDEX `RefreshToken_expiresAt_idx`(`expiresAt`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -79,6 +86,7 @@ CREATE TABLE `RefreshToken` (
 CREATE TABLE `Employee` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `employeeNumber` VARCHAR(20) NOT NULL,
+    `nationalId` VARCHAR(20) NULL,
     `name` VARCHAR(100) NOT NULL,
     `email` VARCHAR(100) NULL,
     `phone` VARCHAR(20) NULL,
@@ -93,7 +101,12 @@ CREATE TABLE `Employee` (
     `updatedAt` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `Employee_employeeNumber_key`(`employeeNumber`),
+    UNIQUE INDEX `Employee_nationalId_key`(`nationalId`),
     UNIQUE INDEX `Employee_email_key`(`email`),
+    INDEX `Employee_status_idx`(`status`),
+    INDEX `Employee_department_idx`(`department`),
+    INDEX `Employee_department_status_idx`(`department`, `status`),
+    INDEX `Employee_deletedAt_idx`(`deletedAt`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -113,6 +126,10 @@ CREATE TABLE `Project` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
+    INDEX `Project_status_idx`(`status`),
+    INDEX `Project_clientName_idx`(`clientName`),
+    INDEX `Project_deletedAt_idx`(`deletedAt`),
+    INDEX `Project_name_idx`(`name`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -136,6 +153,8 @@ CREATE TABLE `ProjectStatusHistory` (
     `changedBy` INTEGER NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
+    INDEX `ProjectStatusHistory_projectId_idx`(`projectId`),
+    INDEX `ProjectStatusHistory_createdAt_idx`(`createdAt`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -148,9 +167,13 @@ CREATE TABLE `InternalProject` (
     `progress` INTEGER NOT NULL DEFAULT 0,
     `startDate` DATETIME(3) NULL,
     `endDate` DATETIME(3) NULL,
+    `deletedAt` DATETIME(3) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
+    INDEX `InternalProject_status_idx`(`status`),
+    INDEX `InternalProject_name_idx`(`name`),
+    INDEX `InternalProject_deletedAt_idx`(`deletedAt`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -162,6 +185,7 @@ CREATE TABLE `InternalProjectMember` (
     `role` VARCHAR(100) NOT NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
+    INDEX `InternalProjectMember_internalProjectId_idx`(`internalProjectId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -173,6 +197,7 @@ CREATE TABLE `InternalProjectNote` (
     `createdBy` INTEGER NOT NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
+    INDEX `InternalProjectNote_internalProjectId_idx`(`internalProjectId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -193,14 +218,19 @@ CREATE TABLE `Treasury` (
 CREATE TABLE `FinanceTransaction` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `treasuryId` INTEGER NOT NULL,
-    `type` ENUM('INCOME', 'EXPENSE', 'TRANSFER') NOT NULL,
+    `type` ENUM('INCOME', 'EXPENSE', 'DEPOSIT') NOT NULL,
     `amount` DECIMAL(14, 2) NOT NULL,
     `description` TEXT NULL,
     `reference` VARCHAR(100) NULL,
     `date` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `createdBy` INTEGER NOT NULL,
+    `cancelledAt` DATETIME(3) NULL,
+    `cancelledBy` INTEGER NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
+    INDEX `FinanceTransaction_type_idx`(`type`),
+    INDEX `FinanceTransaction_date_idx`(`date`),
+    INDEX `FinanceTransaction_treasuryId_type_date_idx`(`treasuryId`, `type`, `date`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -213,9 +243,15 @@ CREATE TABLE `Expense` (
     `date` DATETIME(3) NOT NULL,
     `receipt` VARCHAR(255) NULL,
     `createdBy` INTEGER NOT NULL,
+    `deletedAt` DATETIME(3) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
+    INDEX `Expense_category_idx`(`category`),
+    INDEX `Expense_date_idx`(`date`),
+    INDEX `Expense_createdBy_idx`(`createdBy`),
+    INDEX `Expense_deletedAt_idx`(`deletedAt`),
+    INDEX `Expense_category_date_idx`(`category`, `date`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -235,6 +271,28 @@ CREATE TABLE `AuditLog` (
     INDEX `AuditLog_action_idx`(`action`),
     INDEX `AuditLog_entity_idx`(`entity`),
     INDEX `AuditLog_createdAt_idx`(`createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `SalaryPayment` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `employeeId` INTEGER NOT NULL,
+    `amount` DECIMAL(12, 2) NOT NULL,
+    `month` INTEGER NOT NULL,
+    `year` INTEGER NOT NULL,
+    `status` ENUM('PENDING', 'APPROVED', 'PAID', 'CANCELLED') NOT NULL DEFAULT 'PENDING',
+    `approvedBy` INTEGER NULL,
+    `approvedAt` DATETIME(3) NULL,
+    `notes` TEXT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `SalaryPayment_employeeId_month_year_key`(`employeeId`, `month`, `year`),
+    INDEX `SalaryPayment_status_idx`(`status`),
+    INDEX `SalaryPayment_month_year_idx`(`month`, `year`),
+    INDEX `SalaryPayment_employeeId_idx`(`employeeId`),
+    INDEX `SalaryPayment_approvedBy_idx`(`approvedBy`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -266,7 +324,25 @@ ALTER TABLE `InternalProjectMember` ADD CONSTRAINT `InternalProjectMember_intern
 ALTER TABLE `InternalProjectNote` ADD CONSTRAINT `InternalProjectNote_internalProjectId_fkey` FOREIGN KEY (`internalProjectId`) REFERENCES `InternalProject`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `InternalProjectNote` ADD CONSTRAINT `InternalProjectNote_createdBy_fkey` FOREIGN KEY (`createdBy`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `FinanceTransaction` ADD CONSTRAINT `FinanceTransaction_treasuryId_fkey` FOREIGN KEY (`treasuryId`) REFERENCES `Treasury`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `FinanceTransaction` ADD CONSTRAINT `FinanceTransaction_createdBy_fkey` FOREIGN KEY (`createdBy`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `FinanceTransaction` ADD CONSTRAINT `FinanceTransaction_cancelledBy_fkey` FOREIGN KEY (`cancelledBy`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Expense` ADD CONSTRAINT `Expense_createdBy_fkey` FOREIGN KEY (`createdBy`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `AuditLog` ADD CONSTRAINT `AuditLog_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `SalaryPayment` ADD CONSTRAINT `SalaryPayment_employeeId_fkey` FOREIGN KEY (`employeeId`) REFERENCES `Employee`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `SalaryPayment` ADD CONSTRAINT `SalaryPayment_approvedBy_fkey` FOREIGN KEY (`approvedBy`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

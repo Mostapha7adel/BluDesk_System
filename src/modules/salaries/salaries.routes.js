@@ -5,7 +5,7 @@ const { validate, validateParams } = require('../../middlewares/validate');
 const authenticate = require('../../middlewares/auth');
 const { authorize } = require('../../middlewares/rbac');
 const auditLog = require('../../middlewares/audit');
-const { createSalarySchema, updateSalaryNotesSchema } = require('../../validations/salary');
+const { createSalarySchema, updateSalarySchema, updateSalaryNotesSchema } = require('../../validations/salary');
 
 const paramId = Joi.object({ id: Joi.number().integer().positive().required() });
 
@@ -20,7 +20,8 @@ router
 
 router
   .route('/:id')
-  .get(validateParams(paramId), authorize('salaries.read'), salariesController.findById);
+  .get(validateParams(paramId), authorize('salaries.read'), salariesController.findById)
+  .put(validateParams(paramId), authorize('salaries.create'), validate(updateSalarySchema), auditLog('UPDATE'), salariesController.update);
 
 router.put('/:id/approve', validateParams(paramId), authorize('salaries.approve'), validate(updateSalaryNotesSchema), auditLog('UPDATE'), salariesController.approve);
 router.put('/:id/pay', validateParams(paramId), authorize('salaries.approve'), validate(updateSalaryNotesSchema), auditLog('UPDATE'), salariesController.pay);

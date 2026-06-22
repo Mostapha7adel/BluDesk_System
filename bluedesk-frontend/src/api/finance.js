@@ -7,4 +7,5 @@ export const updateTreasuryApi = (id, data) => axiosInstance.put(`/finance/treas
 export const getTransactionsApi = (params) => axiosInstance.get('/finance/transactions', { params });
 export const createTransactionApi = (data) => axiosInstance.post('/finance/transactions', data);
 export const getFinancialReportApi = (params) => axiosInstance.get('/finance/reports', { params });
-export const cancelTransactionApi = (id) => axiosInstance.put(`/finance/transactions/${id}/cancel`);
+export const cancelTransactionApi  = (id)     => axiosInstance.put(`/finance/transactions/${id}/cancel`);
+export const updateTransactionApi  = (id, data) => axiosInstance.put(`/finance/transactions/${id}`, data);

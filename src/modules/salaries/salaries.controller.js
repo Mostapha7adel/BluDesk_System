@@ -29,6 +29,15 @@ class SalariesController {
     }
   }
 
+  async update(req, res, next) {
+    try {
+      const payment = await salariesService.update(parseInt(req.params.id), req.body);
+      return ApiResponse.success(res, payment, 'Salary payment updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async approve(req, res, next) {
     try {
       const payment = await salariesService.updateStatus(

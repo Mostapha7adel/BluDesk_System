@@ -9,6 +9,7 @@ const {
   createTreasurySchema,
   updateTreasurySchema,
   createTransactionSchema,
+  updateTransactionSchema,
 } = require('../../validations/finance');
 
 const paramId = Joi.object({ id: Joi.number().integer().positive().required() });
@@ -30,6 +31,7 @@ router
 router.get('/transactions', authorize('finance.read'), financeController.getTransactions);
 router.post('/transactions', authorize('finance.create_transaction'), validate(createTransactionSchema), auditLog('CREATE'), financeController.createTransaction);
 
+router.put('/transactions/:id', validateParams(paramId), authorizeRole('super_admin'), validate(updateTransactionSchema), auditLog('UPDATE'), financeController.updateTransaction);
 router.put('/transactions/:id/cancel', validateParams(paramId), authorizeRole('super_admin'), auditLog('UPDATE'), financeController.cancelTransaction);
 
 // Reports

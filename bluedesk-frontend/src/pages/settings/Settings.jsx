@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, Paper, Button, Grid, Card, CardContent, Chip, LinearProgress, Stack, Alert } from '@mui/material';
 import { Download, HardDrive, Database, Activity, Clock, Cpu, Server, RefreshCw } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import { selectUser } from '../../store/authSlice';
 import PageHeader from '../../components/ui/PageHeader';
 import { useSystemHealth, useCreateBackup } from '../../hooks/api';
 import useTranslate from '../../utils/useTranslate';
@@ -31,6 +33,10 @@ function formatUptime(seconds) {
 
 export default function Settings() {
   const t = useTranslate();
+  const user = useSelector(selectUser);
+  const perms = user?.permissions || [];
+  const isSuperAdmin = user?.role?.slug === 'super_admin';
+  const canBackup = isSuperAdmin || perms.includes('settings.backup');
   const [backupStatus, setBackupStatus] = useState('');
   const { data: health, isLoading } = useSystemHealth();
   const backupMutation = useCreateBackup();
@@ -127,6 +133,7 @@ export default function Settings() {
         </Paper>
       )}
 
+      {canBackup && (<>
       <Typography variant="h6" fontWeight={600} sx={{ mb: 2, mt: 4, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Download size={20} /> {t('settings.backup')}
       </Typography>
@@ -142,6 +149,7 @@ export default function Settings() {
           {backupMutation.isPending ? t('settings.backingUp') : t('settings.downloadBackup')}
         </Button>
       </Paper>
+      </>)}
     </Box>
   );
 }

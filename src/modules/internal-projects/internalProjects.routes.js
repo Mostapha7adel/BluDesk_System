@@ -4,6 +4,7 @@ const { validate, validateParams } = require('../../middlewares/validate');
 const authenticate = require('../../middlewares/auth');
 const { authorize } = require('../../middlewares/rbac');
 const auditLog = require('../../middlewares/audit');
+const Joi = require('joi');
 const {
   paramId, createInternalProjectSchema, updateInternalProjectSchema,
   noteSchema, teamMemberSchema, teamMemberIdSchema,
@@ -50,6 +51,9 @@ router.post(
   auditLog('CREATE'),
   internalProjectsController.addTeamMember
 );
+
+router.patch('/:id/status', validateParams(paramId), authorize('internal_projects.update'), validate(Joi.object({ status: Joi.string().valid('PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED').required() })), auditLog('UPDATE'), internalProjectsController.updateStatus);
+router.patch('/:id/progress', validateParams(paramId), authorize('internal_projects.update'), validate(Joi.object({ progress: Joi.number().min(0).max(100).required() })), auditLog('UPDATE'), internalProjectsController.updateProgress);
 
 router.delete(
   '/:id/team-members/:memberId',

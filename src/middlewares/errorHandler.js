@@ -68,7 +68,7 @@ const errorHandler = (err, req, res, next) => {
   }
 
   logger.error(`${error.statusCode || 500} - ${error.message}`, {
-    stack: error.stack,
+    stack: err.stack,
     url: req.originalUrl,
     method: req.method,
     ip: req.ip,
@@ -80,11 +80,11 @@ const errorHandler = (err, req, res, next) => {
   if (process.env.NODE_ENV === 'development') {
     return ApiResponse.error(res, message, statusCode, {
       ...(error.errors && { validation: error.errors }),
-      stack: error.stack,
+      stack: err.stack,
     });
   }
 
-  return ApiResponse.error(res, message, statusCode, error.errors || null);
+  return ApiResponse.error(res, message, statusCode, null);
 };
 
 module.exports = { AppError, errorHandler };

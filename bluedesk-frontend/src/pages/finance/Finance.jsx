@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, Paper, Tabs, Tab, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Stack, MenuItem, Alert, IconButton } from '@mui/material';
-import { Plus, Wallet, TrendingUp, TrendingDown, XCircle } from 'lucide-react';
+import { Plus, Wallet, TrendingUp, TrendingDown, XCircle, Edit2 } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { selectUser } from '../../store/authSlice';
 import { Container as Grid, Item as GridItem } from '../../components/ui/Grid';
@@ -10,24 +10,28 @@ import DataTable from '../../components/tables/DataTable';
 import RevenueChart from '../../components/charts/RevenueChart';
 import ExpensesChart from '../../components/charts/ExpensesChart';
 import { formatCurrency, formatDateTime } from '../../utils/format';
-import { useTransactions, useFinancialReport, useCreateTransaction, useCancelTransaction } from '../../hooks/api';
+import { useTransactions, useFinancialReport, useCreateTransaction, useUpdateTransaction, useCancelTransaction } from '../../hooks/api';
 import useTranslate from '../../utils/useTranslate';
 
 export default function Finance() {
   const t = useTranslate();
   const user = useSelector(selectUser);
   const isSuperAdmin = user?.role?.slug === 'super_admin';
+  const perms = user?.permissions || [];
+  const canCreate = isSuperAdmin || perms.includes('finance.create_transaction');
   const [tab, setTab] = useState(0);
   const [page, setPage] = useState(1);
   const [openDialog, setOpenDialog] = useState(false);
   const [error, setError] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
 
   useEffect(() => { document.title = t('finance.title'); }, [t]);
 
   const { data: txData, isLoading } = useTransactions({ page, limit: 50 });
   const { data: report } = useFinancialReport();
   const createMutation = useCreateTransaction();
+  const updateMutation = useUpdateTransaction();
   const cancelMutation = useCancelTransaction();
 
   const transactions = txData?.data || [];
@@ -71,9 +75,16 @@ export default function Finance() {
     { key: 'description', label: t('finance.description') },
     { key: 'treasury', label: t('finance.account'), render: () => t('finance.accountName') },
     { key: 'type', label: t('finance.type'), render: (row) => (
-      <Typography variant="body2" color={row.type === 'INCOME' || row.type === 'DEPOSIT' ? 'success.main' : 'error.main'} fontWeight={500}>
-        {row.type === 'INCOME' ? t('finance.income') : row.type === 'EXPENSE' ? t('finance.expenses') : row.type === 'DEPOSIT' ? t('finance.deposit') : row.type}
-      </Typography>
+      <Box>
+        <Typography variant="body2" color={row.type === 'INCOME' || row.type === 'DEPOSIT' ? 'success.main' : 'error.main'} fontWeight={500}>
+          {row.type === 'INCOME' ? t('finance.income') : row.type === 'EXPENSE' ? t('finance.expenses') : row.type === 'DEPOSIT' ? t('finance.deposit') : row.type}
+        </Typography>
+        {row.recurringType && row.recurringType !== 'ONE_TIME' && (
+          <Typography variant="caption" color="text.secondary">
+            {row.recurringType === 'MONTHLY' ? t('finance.monthly') : t('finance.weekly')}
+          </Typography>
+        )}
+      </Box>
     )},
     { key: 'amount', label: t('finance.amount'), render: (row) => (
       <Typography variant="body2" fontWeight={600} color={row.type === 'INCOME' || row.type === 'DEPOSIT' ? 'success.main' : 'error.main'}>
@@ -86,15 +97,44 @@ export default function Finance() {
         row.cancelledAt ? (
           <Typography variant="caption" color="text.disabled">{t('finance.cancelled')}</Typography>
         ) : (
-          <IconButton size="small" color="error" onClick={() => setCancelTarget(row)} title={t('finance.cancelTransaction')}>
-            <XCircle size={16} />
-          </IconButton>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <IconButton size="small" color="primary" onClick={() => setEditTarget(row)} title={t('common.edit')}>
+              <Edit2 size={16} />
+            </IconButton>
+            <IconButton size="small" color="error" onClick={() => setCancelTarget(row)} title={t('finance.cancelTransaction')}>
+              <XCircle size={16} />
+            </IconButton>
+          </Box>
         )
       ),
     }] : []),
   ];
 
   const filtered = tab === 0 ? transactions : tab === 1 ? transactions.filter(t => t.type === 'INCOME' || t.type === 'DEPOSIT') : tab === 2 ? transactions.filter(t => t.type === 'EXPENSE') : transactions.filter(t => t.type === 'DEPOSIT');
+
+  const handleEditSubmit = async (form) => {
+    setError('');
+    if (!form.amount || parseFloat(form.amount) <= 0) {
+      setError(t('finance.requiredFields'));
+      return;
+    }
+    try {
+      await updateMutation.mutateAsync({
+        id: editTarget.id,
+        data: {
+          type: form.type,
+          amount: parseFloat(form.amount),
+          description: form.description || '',
+          reference: form.reference || undefined,
+          recurringType: form.recurringType || 'ONE_TIME',
+          date: form.date || undefined,
+        },
+      });
+      setEditTarget(null);
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || t('common.error'));
+    }
+  };
 
   const handleSubmit = async (form) => {
     setError('');
@@ -109,6 +149,7 @@ export default function Finance() {
         amount: parseFloat(form.amount),
         description: form.description || '',
         reference: form.reference || undefined,
+        recurringType: form.recurringType || 'ONE_TIME',
       });
       setOpenDialog(false);
     } catch (err) {
@@ -121,9 +162,7 @@ export default function Finance() {
       <PageHeader
         title={t('finance.title')}
         subtitle={t('finance.subtitle')}
-        actionLabel={t('finance.addTransaction')}
-        onAction={() => setOpenDialog(true)}
-        actionIcon={Plus}
+        {...(canCreate ? { actionLabel: t('finance.addTransaction'), onAction: () => setOpenDialog(true), actionIcon: Plus } : {})}
       />
 
       <Paper sx={{ p: 2.5, borderRadius: 3, mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -167,6 +206,7 @@ export default function Finance() {
       </Paper>
 
       <TransactionDialog open={openDialog} onClose={() => { setOpenDialog(false); setError(''); }} t={t} onSubmit={handleSubmit} error={error} />
+      <EditTransactionDialog open={!!editTarget} transaction={editTarget} onClose={() => { setEditTarget(null); setError(''); }} t={t} onSubmit={handleEditSubmit} error={error} />
 
       <Dialog open={!!cancelTarget} onClose={() => setCancelTarget(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 600 }}>{t('finance.confirmCancel')}</DialogTitle>
@@ -184,12 +224,62 @@ export default function Finance() {
   );
 }
 
-function TransactionDialog({ open, onClose, t, onSubmit, error }) {
-  const [form, setForm] = useState({ type: 'INCOME', amount: '', description: '', reference: '' });
+function EditTransactionDialog({ open, transaction, onClose, t, onSubmit, error }) {
+  const [form, setForm] = useState({ type: 'INCOME', amount: '', description: '', reference: '', recurringType: 'ONE_TIME' });
   const handleChange = (f) => (e) => setForm({ ...form, [f]: e.target.value });
 
   useEffect(() => {
-    if (!open) setForm({ type: 'INCOME', amount: '', description: '', reference: '' });
+    if (transaction) {
+      setForm({
+        type: transaction.type || 'INCOME',
+        amount: transaction.amount?.toString() || '',
+        description: transaction.description || '',
+        reference: transaction.reference || '',
+        recurringType: transaction.recurringType || 'ONE_TIME',
+        date: transaction.date ? transaction.date.slice(0, 10) : '',
+      });
+    }
+  }, [transaction]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 600 }}>{t('common.edit')}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} sx={{ mt: 1 }}>
+          {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
+          <TextField label={t('finance.account')} size="small" fullWidth value={t('finance.accountName')} slotProps={{ input: { readOnly: true } }} />
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField label={t('finance.type')} select size="small" fullWidth value={form.type} onChange={handleChange('type')}>
+              <MenuItem value="INCOME">{t('finance.income')}</MenuItem>
+              <MenuItem value="EXPENSE">{t('finance.expenses')}</MenuItem>
+              <MenuItem value="DEPOSIT">{t('finance.deposit')}</MenuItem>
+            </TextField>
+            <TextField label={t('finance.amount')} type="number" size="small" fullWidth value={form.amount} onChange={handleChange('amount')} />
+          </Box>
+          <TextField label={t('finance.recurringType')} select size="small" fullWidth value={form.recurringType} onChange={handleChange('recurringType')}>
+            <MenuItem value="ONE_TIME">{t('finance.oneTime')}</MenuItem>
+            <MenuItem value="WEEKLY">{t('finance.weekly')}</MenuItem>
+            <MenuItem value="MONTHLY">{t('finance.monthly')}</MenuItem>
+          </TextField>
+          <TextField label={t('finance.description')} size="small" fullWidth value={form.description} onChange={handleChange('description')} />
+          <TextField label={t('finance.reference')} size="small" fullWidth value={form.reference} onChange={handleChange('reference')} />
+          <TextField label={t('finance.date')} type="date" size="small" fullWidth value={form.date} onChange={handleChange('date')} InputLabelProps={{ shrink: true }} />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.cancel')}</Button>
+        <Button variant="contained" sx={{ borderRadius: 2 }} onClick={() => onSubmit(form)}>{t('common.update')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function TransactionDialog({ open, onClose, t, onSubmit, error }) {
+  const [form, setForm] = useState({ type: 'INCOME', amount: '', description: '', reference: '', recurringType: 'ONE_TIME' });
+  const handleChange = (f) => (e) => setForm({ ...form, [f]: e.target.value });
+
+  useEffect(() => {
+    if (!open) setForm({ type: 'INCOME', amount: '', description: '', reference: '', recurringType: 'ONE_TIME' });
   }, [open]);
 
   return (
@@ -207,6 +297,11 @@ function TransactionDialog({ open, onClose, t, onSubmit, error }) {
             </TextField>
             <TextField label={t('finance.amount')} type="number" size="small" fullWidth value={form.amount} onChange={handleChange('amount')} />
           </Box>
+          <TextField label={t('finance.recurringType')} select size="small" fullWidth value={form.recurringType} onChange={handleChange('recurringType')}>
+            <MenuItem value="ONE_TIME">{t('finance.oneTime')}</MenuItem>
+            <MenuItem value="WEEKLY">{t('finance.weekly')}</MenuItem>
+            <MenuItem value="MONTHLY">{t('finance.monthly')}</MenuItem>
+          </TextField>
           <TextField label={t('finance.description')} size="small" fullWidth value={form.description} onChange={handleChange('description')} />
           <TextField label={t('finance.reference')} size="small" fullWidth value={form.reference} onChange={handleChange('reference')} />
         </Stack>

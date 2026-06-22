@@ -2,7 +2,7 @@ import axios from 'axios';
 import { store } from '../store';
 import { setAccessToken, setCredentials, logout } from '../store/authSlice';
 
-const API_URL = 'http://localhost:5000/api/v1';
+const API_URL = '/api/v1';
 
 const axiosInstance = axios.create({
   baseURL: API_URL,
@@ -59,10 +59,10 @@ axiosInstance.interceptors.response.use(
 
       try {
         const response = await axios.post(`${API_URL}/auth/refresh-token`, {}, { withCredentials: true });
-        const { user, accessToken } = response.data.data;
+        const { user, accessToken, permissions } = response.data.data;
 
         refreshFailed = false;
-        store.dispatch(setCredentials({ user, accessToken }));
+        store.dispatch(setCredentials({ user, accessToken, permissions }));
         processQueue(null, accessToken);
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return axiosInstance(originalRequest);
@@ -83,8 +83,8 @@ axiosInstance.interceptors.response.use(
 export const silentRefresh = async () => {
   try {
     const response = await axios.post(`${API_URL}/auth/refresh-token`, {}, { withCredentials: true });
-    const { user, accessToken } = response.data.data;
-    store.dispatch(setCredentials({ user, accessToken }));
+    const { user, accessToken, permissions } = response.data.data;
+    store.dispatch(setCredentials({ user, accessToken, permissions }));
     refreshFailed = false;
     return true;
   } catch {

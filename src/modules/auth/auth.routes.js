@@ -13,14 +13,14 @@ const {
 
 const refreshLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 30,
   message: { success: false, message: 'Too many refresh attempts, try again later' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 const forgotLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
+  windowMs: 60 * 1000,
   max: 3,
   message: { success: false, message: 'Too many password reset requests, try again later' },
   standardHeaders: true,

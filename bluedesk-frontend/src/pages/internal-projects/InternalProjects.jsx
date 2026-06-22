@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Box, Typography, Paper, IconButton, Card, CardContent, LinearProgress, Avatar, Stack, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Alert, Tabs, Tab } from '@mui/material';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Box, Typography, Paper, IconButton, Card, CardContent, LinearProgress, Avatar, Stack, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Alert, Tabs, Tab, Select, Slider, Tooltip } from '@mui/material';
+import { Plus, Edit2, Trash2, Percent, FileText } from 'lucide-react';
 import { Container as Grid, Item as GridItem } from '../../components/ui/Grid';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { useSelector } from 'react-redux';
+import { selectUser } from '../../store/authSlice';
 import { useInternalProjects, useCreateInternalProject, useUpdateInternalProject, useDeleteInternalProject } from '../../hooks/api';
+import api from '../../api/axios';
 import { formatDate } from '../../utils/format';
 import useTranslate from '../../utils/useTranslate';
 
@@ -13,15 +16,23 @@ const TAB_STATUSES = { active: ['PLANNING', 'IN_PROGRESS', 'ON_HOLD'], completed
 
 export default function InternalProjects() {
   const t = useTranslate();
+  const user = useSelector(selectUser);
+  const perms = user?.permissions || [];
+  const isSuperAdmin = user?.role?.slug === 'super_admin';
+  const canCreate = isSuperAdmin || perms.includes('internal_projects.create');
+  const canUpdate = isSuperAdmin || perms.includes('internal_projects.update');
+  const canDelete = isSuperAdmin || perms.includes('internal_projects.delete');
   const [tab, setTab] = useState(0);
   const [openDialog, setOpenDialog] = useState(false);
   const [editProject, setEditProject] = useState(null);
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [progressTarget, setProgressTarget] = useState(null);
+  const [descriptionTarget, setDescriptionTarget] = useState(null);
 
   useEffect(() => { document.title = t('internalProjects.title'); }, [t]);
 
-  const { data, isLoading } = useInternalProjects({ limit: 100 });
+  const { data, isLoading, refetch } = useInternalProjects({ limit: 100 });
   const createMutation = useCreateInternalProject();
   const updateMutation = useUpdateInternalProject();
   const deleteMutation = useDeleteInternalProject();
@@ -52,6 +63,25 @@ export default function InternalProjects() {
     }
   };
 
+  const handleStatusChange = async (project, newStatus) => {
+    try {
+      await api.patch(`/internal-projects/${project.id}/status`, { status: newStatus });
+      refetch();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || t('common.error'));
+    }
+  };
+
+  const handleProgressChange = async (projectId, progress) => {
+    try {
+      await api.patch(`/internal-projects/${projectId}/progress`, { progress });
+      refetch();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || t('common.error'));
+    }
+    setProgressTarget(null);
+  };
+
   const handleDelete = async () => {
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
@@ -65,7 +95,7 @@ export default function InternalProjects() {
 
   return (
     <Box>
-      <PageHeader title={t('internalProjects.title')} subtitle={t('internalProjects.subtitle')} actionLabel={t('internalProjects.newProject')} onAction={() => { setEditProject(null); setOpenDialog(true); }} actionIcon={Plus} />
+      <PageHeader title={t('internalProjects.title')} subtitle={t('internalProjects.subtitle')} {...(canCreate ? { actionLabel: t('internalProjects.newProject'), onAction: () => { setEditProject(null); setOpenDialog(true); }, actionIcon: Plus } : {})} />
 
       <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 2.5, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label={t('common.all')} />
@@ -114,13 +144,37 @@ export default function InternalProjects() {
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
                       <Typography variant="h6" fontWeight={600}>{project.name}</Typography>
-                      <StatusBadge status={project.status} size="small" />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {!isReadOnly(project) && canUpdate ? (
+                          <Select
+                            value={project.status}
+                            size="small"
+                            onChange={(e) => handleStatusChange(project, e.target.value)}
+                            sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0 } }}
+                          >
+                            {INTERNAL_STATUSES.filter(s => s !== 'CANCELLED').map((s) => (
+                              <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{t('statuses.' + s) || s}</MenuItem>
+                            ))}
+                          </Select>
+                        ) : (
+                          <StatusBadge status={project.status} size="small" />
+                        )}
+                      </Box>
                     </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{project.description || '—'}</Typography>
+                    <Box onClick={() => setDescriptionTarget(project)} sx={{ mb: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 2, maxHeight: 80, overflow: 'hidden', cursor: 'pointer', '&:hover': { bgcolor: 'action.selected' } }}>
+                      <Typography variant="body2" sx={{ lineHeight: 1.5, fontSize: 13, wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {project.description || '—'}
+                      </Typography>
+                    </Box>
                     <Box sx={{ mb: 2 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="caption" color="text.secondary">{t('internalProjects.progress')}</Typography>
-                        <Typography variant="caption" fontWeight={600}>{project.progress || 0}%</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="caption" fontWeight={600}>{project.progress || 0}%</Typography>
+                          {!isReadOnly(project) && canUpdate && (
+                            <IconButton size="small" onClick={() => setProgressTarget(project)}><Percent size={14} /></IconButton>
+                          )}
+                        </Box>
                       </Box>
                       <LinearProgress variant="determinate" value={project.progress || 0} sx={{ height: 6, borderRadius: 3, bgcolor: 'grey.100', '& .MuiLinearProgress-bar': { borderRadius: 3 } }} />
                     </Box>
@@ -143,10 +197,10 @@ export default function InternalProjects() {
                         ))}
                       </Box>
                       <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        {!isReadOnly(project) && (
+                        {!isReadOnly(project) && canUpdate && (
                           <IconButton size="small" onClick={() => { setEditProject(project); setOpenDialog(true); }}><Edit2 size={16} /></IconButton>
                         )}
-                        <IconButton size="small" color="error" onClick={() => setDeleteTarget(project)}><Trash2 size={16} /></IconButton>
+                        {canDelete && <IconButton size="small" color="error" onClick={() => setDeleteTarget(project)}><Trash2 size={16} /></IconButton>}
                       </Box>
                     </Box>
                   </CardContent>
@@ -158,6 +212,10 @@ export default function InternalProjects() {
       )}
 
       <InternalProjectDialog open={openDialog} onClose={() => { setOpenDialog(false); setEditProject(null); setError(''); }} edit={editProject} t={t} onSubmit={handleSubmit} error={error} />
+
+      <DescriptionDialog open={!!descriptionTarget} project={descriptionTarget} onClose={() => setDescriptionTarget(null)} t={t} />
+
+      <ProgressDialog open={!!progressTarget} project={progressTarget} onClose={() => setProgressTarget(null)} t={t} onSubmit={handleProgressChange} />
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 600 }}>{t('common.confirmDelete')}</DialogTitle>
@@ -174,7 +232,7 @@ export default function InternalProjects() {
 }
 
 function InternalProjectDialog({ open, onClose, edit, t, onSubmit, error }) {
-  const [form, setForm] = useState(edit || { name: '', description: '', status: 'PLANNING', progress: '0', startDate: '', endDate: '' });
+  const [form, setForm] = useState({ name: '', description: '', status: 'PLANNING', progress: '0', startDate: '', endDate: '' });
   const handleChange = (f) => (e) => setForm({ ...form, [f]: e.target.value });
 
   useEffect(() => {
@@ -215,6 +273,45 @@ function InternalProjectDialog({ open, onClose, edit, t, onSubmit, error }) {
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.cancel')}</Button>
         <Button variant="contained" sx={{ borderRadius: 2 }} onClick={() => onSubmit(form)}>{edit ? t('common.update') : t('common.create')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function DescriptionDialog({ open, project, onClose, t }) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 600 }}>{project?.name}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body1" sx={{ lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {project?.description || '—'}
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.close')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function ProgressDialog({ open, project, onClose, t, onSubmit }) {
+  const [progress, setProgress] = useState(50);
+
+  useEffect(() => {
+    if (project) setProgress(project.progress || 0);
+  }, [project, open]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ fontWeight: 600 }}>{t('internalProjects.progress')} — {project?.name}</DialogTitle>
+      <DialogContent>
+        <Box sx={{ px: 1, py: 3 }}>
+          <Slider value={progress} onChange={(e, v) => setProgress(v)} min={0} max={100} step={5} valueLabelDisplay="on" />
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.cancel')}</Button>
+        <Button variant="contained" sx={{ borderRadius: 2 }} onClick={() => { onSubmit(project?.id, progress); onClose(); }}>{t('common.save')}</Button>
       </DialogActions>
     </Dialog>
   );

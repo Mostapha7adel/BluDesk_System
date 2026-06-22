@@ -6,6 +6,10 @@ const authorize = (...allowedPermissions) => {
       return ApiResponse.unauthorized(res, 'Authentication required');
     }
 
+    if (req.user.role?.slug === 'super_admin') {
+      return next();
+    }
+
     const hasPermission = allowedPermissions.some((permission) =>
       req.user.permissions.includes(permission)
     );

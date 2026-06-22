@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Tabs, Tab, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Stack, MenuItem, Avatar, Chip, Alert, IconButton } from '@mui/material';
-import { Shield, Plus, Check, X, UserPlus, Edit2, Trash2 } from 'lucide-react';
+import { Box, Typography, Paper, Tabs, Tab, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Stack, MenuItem, Avatar, Chip, Alert, IconButton, Switch, FormControlLabel } from '@mui/material';
+import { Shield, UserPlus, Edit2, Trash2, Save } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import DataTable from '../../components/tables/DataTable';
-import { useRoles, usePermissions, useRolePermissions, useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks/api';
+import { useSelector } from 'react-redux';
+import { selectUser } from '../../store/authSlice';
+import { useRoles, usePermissions, useRolePermissions, useUsers, useCreateUser, useUpdateUser, useDeleteUser, useAssignPermissions, useRemovePermission } from '../../hooks/api';
 import useTranslate from '../../utils/useTranslate';
 
 export default function Permissions() {
   const t = useTranslate();
+  const user = useSelector(selectUser);
+  const perms = user?.permissions || [];
+  const isSuperAdmin = user?.role?.slug === 'super_admin';
+  const canCreateUser = isSuperAdmin || perms.includes('users.create');
+  const canUpdateUser = isSuperAdmin || perms.includes('users.update');
+  const canDeleteUser = isSuperAdmin || perms.includes('users.delete');
+  const canAssignPerms = isSuperAdmin || perms.includes('permissions.assign');
   const [tab, setTab] = useState(0);
   const [selectedRole, setSelectedRole] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
@@ -31,8 +40,18 @@ export default function Permissions() {
   const selectedRoleObj = selectedRole || roles[0];
   const selectedRoleId = selectedRoleObj?.id;
 
-  const { data: rolePerms } = useRolePermissions(selectedRoleId);
+  const { data: rolePerms, refetch: refetchRolePerms } = useRolePermissions(selectedRoleId);
+  const assignPermsMutation = useAssignPermissions();
+  const removePermMutation = useRemovePermission();
+
   const assignedSlugs = new Set((rolePerms || []).map(p => p.slug));
+  const [localAssigned, setLocalAssigned] = useState({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    setLocalAssigned({});
+    setHasChanges(false);
+  }, [selectedRoleId]);
 
   useEffect(() => {
     if (roles.length > 0 && !selectedRole) setSelectedRole(roles[0]);
@@ -43,6 +62,41 @@ export default function Permissions() {
     if (!permissionGroups[p.group]) permissionGroups[p.group] = [];
     permissionGroups[p.group].push(p);
   });
+
+  const isPermissionChecked = (slug) => {
+    if (slug in localAssigned) return localAssigned[slug];
+    return assignedSlugs.has(slug);
+  };
+
+  const handleTogglePermission = (slug) => {
+    setLocalAssigned((prev) => ({ ...prev, [slug]: !isPermissionChecked(slug) }));
+    setHasChanges(true);
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedRoleId) return;
+    const permIdsToAdd = [];
+    const permIdsToRemove = [];
+    for (const perm of allPermissions) {
+      const wasAssigned = assignedSlugs.has(perm.slug);
+      const nowAssigned = isPermissionChecked(perm.slug);
+      if (!wasAssigned && nowAssigned) permIdsToAdd.push(perm.id);
+      if (wasAssigned && !nowAssigned) permIdsToRemove.push(perm.id);
+    }
+    try {
+      if (permIdsToAdd.length > 0) {
+        await assignPermsMutation.mutateAsync({ id: selectedRoleId, permissionIds: permIdsToAdd });
+      }
+      for (const permId of permIdsToRemove) {
+        await removePermMutation.mutateAsync({ roleId: selectedRoleId, permissionId: permId });
+      }
+      setLocalAssigned({});
+      setHasChanges(false);
+      refetchRolePerms();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || t('common.error'));
+    }
+  };
 
   const userColumns = [
     {
@@ -63,14 +117,14 @@ export default function Permissions() {
         <Chip label={row.status} size="small" color={row.status === 'ACTIVE' ? 'success' : row.status === 'INACTIVE' ? 'default' : 'warning'} />
       )
     },
-    {
+    ...((canUpdateUser || canDeleteUser) ? [{
       key: 'actions', label: '', render: (row) => (
         <Stack direction="row" spacing={0.5}>
-          <IconButton size="small" onClick={() => { setEditUser(row); setOpenDialog(true); }}><Edit2 size={14} /></IconButton>
-          <IconButton size="small" color="error" onClick={() => setDeleteTarget(row)}><Trash2 size={14} /></IconButton>
+          {canUpdateUser && <IconButton size="small" onClick={() => { setEditUser(row); setOpenDialog(true); }}><Edit2 size={14} /></IconButton>}
+          {canDeleteUser && <IconButton size="small" color="error" onClick={() => setDeleteTarget(row)}><Trash2 size={14} /></IconButton>}
         </Stack>
       )
-    },
+    }] : []),
   ];
 
   const handleSubmit = async (form) => {
@@ -116,8 +170,9 @@ export default function Permissions() {
               flex: '1 1 120px', p: 2, borderRadius: 3, textAlign: 'center', cursor: 'pointer',
               border: selectedRoleObj?.id === role.id ? 2 : 1,
               borderColor: selectedRoleObj?.id === role.id ? 'primary.main' : 'divider',
-              transition: 'all 0.2s', bgcolor: 'background.paper',
-              '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 25px rgba(0,0,0,0.08)' },
+              transition: 'all 0.2s',
+              bgcolor: selectedRoleObj?.id === role.id ? 'action.selected' : 'background.paper',
+              '&:hover': { transform: 'translateY(-2px)', boxShadow: (theme) => `0 8px 25px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.08)'}` },
             }}
           >
             <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1 }}>
@@ -137,42 +192,48 @@ export default function Permissions() {
 
         {tab === 0 && (
           <Box sx={{ p: 3 }}>
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 2, textTransform: 'capitalize' }}>
-              {selectedRoleObj?.name} {t('roles.permissions')}
-            </Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 600 }}>{t('common.total')}</TableCell>
-                    {allPermissions.map((perm) => (
-                      <TableCell key={perm.id} sx={{ fontWeight: 600, textAlign: 'center', fontSize: 11 }}>{perm.name}</TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {Object.entries(permissionGroups).map(([group, perms]) => (
-                    <TableRow key={group}>
-                      <TableCell sx={{ fontWeight: 500 }}>{t(`permissions.${group}Group`) || group}</TableCell>
-                      {allPermissions.map((perm) => (
-                        <TableCell key={perm.id} sx={{ textAlign: 'center' }}>
-                          {perms.some(p => p.id === perm.id) ? (
-                            assignedSlugs.has(perm.slug) ? <Check size={16} color="#10B981" style={{ display: 'inline' }} /> : <X size={16} color="#CBD5E1" style={{ display: 'inline', opacity: 0.3 }} />
-                          ) : <span style={{ opacity: 0.1 }}>—</span>}
-                        </TableCell>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" fontWeight={600}>
+                {selectedRoleObj?.name} — {t('roles.permissions')}
+              </Typography>
+              {hasChanges && canAssignPerms && (
+                <Button variant="contained" size="small" startIcon={<Save size={16} />} sx={{ borderRadius: 2 }} onClick={handleSavePermissions}>
+                  {t('common.save')}
+                </Button>
+              )}
+            </Box>
+            {error && <Alert severity="error" sx={{ borderRadius: 2, mb: 2 }}>{error}</Alert>}
+            <Paper sx={{ p: 3, borderRadius: 2 }}>
+              <Stack spacing={2.5}>
+                {Object.entries(permissionGroups).map(([group, perms]) => (
+                  <Box key={group}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {t(`permissions.${group}Group`) || group}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {perms.map(p => (
+                        <Chip
+                          key={p.id}
+                          label={p.name}
+                          size="small"
+                          color={isPermissionChecked(p.slug) ? 'success' : 'default'}
+                          variant={isPermissionChecked(p.slug) ? 'filled' : 'outlined'}
+                          onClick={() => handleTogglePermission(p.slug)}
+                          sx={{ cursor: 'pointer', fontWeight: 500, '&:hover': { opacity: 0.8 } }}
+                        />
                       ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                    </Box>
+                  </Box>
+                ))}
+              </Stack>
+            </Paper>
           </Box>
         )}
 
         {tab === 1 && (
           <Box sx={{ p: 0 }}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 3, pt: 2 }}>
-              <Button variant="contained" size="small" startIcon={<UserPlus size={16} />} sx={{ borderRadius: 2 }} onClick={() => { setEditUser(null); setOpenDialog(true); }}>{t('users.addUser')}</Button>
+              {canCreateUser && <Button variant="contained" size="small" startIcon={<UserPlus size={16} />} sx={{ borderRadius: 2 }} onClick={() => { setEditUser(null); setOpenDialog(true); }}>{t('users.addUser')}</Button>}
             </Box>
             <DataTable columns={userColumns} data={users} loading={usersLoading} />
           </Box>

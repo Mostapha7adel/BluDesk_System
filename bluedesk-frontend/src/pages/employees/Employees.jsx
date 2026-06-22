@@ -14,12 +14,18 @@ import EmptyState from '../../components/ui/EmptyState';
 import { formatDate, formatCurrency } from '../../utils/format';
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee } from '../../hooks/api';
 import useTranslate from '../../utils/useTranslate';
+import { useSelector } from 'react-redux';
+import { selectUser } from '../../store/authSlice';
 
-import axios from '../../api/axios';
-const API_BASE = axios.defaults.baseURL?.replace('/api/v1', '') || 'http://localhost:5000';
 
 export default function Employees() {
   const t = useTranslate();
+  const user = useSelector(selectUser);
+  const perms = user?.permissions || [];
+  const isSuperAdmin = user?.role?.slug === 'super_admin';
+  const canCreate = isSuperAdmin || perms.includes('employees.create');
+  const canUpdate = isSuperAdmin || perms.includes('employees.update');
+  const canDelete = isSuperAdmin || perms.includes('employees.delete');
   const [search, setSearch] = useState('');
   const [view, setView] = useState('grid');
   const [page, setPage] = useState(1);
@@ -37,7 +43,7 @@ export default function Employees() {
   const employees = data?.data || [];
   const pagination = data?.pagination || {};
 
-  const imgUrl = (img) => img ? `${API_BASE}/uploads/${img}` : null;
+  const imgUrl = (img) => img ? `/api/v1/uploads/${img}` : null;
 
   const columns = [
     { key: 'name', label: t('employees.name'), render: (row) => (
@@ -53,16 +59,18 @@ export default function Employees() {
     { key: 'salary', label: t('employees.salary'), render: (row) => formatCurrency(parseFloat(row.salary || 0)) },
     { key: 'hireDate', label: t('employees.hireDate'), render: (row) => formatDate(row.hireDate) },
     { key: 'status', label: t('common.status'), render: (row) => <StatusBadge status={row.status} /> },
-    { key: 'actions', label: '', render: (row) => (
-      <Stack direction="row" spacing={0.5}>
-        <IconButton size="small" onClick={() => { setEditEmployee(row); setOpenDialog(true); }}><Edit2 size={14} /></IconButton>
-        <IconButton size="small" color="error" onClick={() => {
-          if (window.confirm(t('common.confirmDelete'))) {
-            deleteMutation.mutate(row.id, { onError: () => {} });
-          }
-        }}><Trash2 size={14} /></IconButton>
-      </Stack>
-    )},
+    ...((canUpdate || canDelete) ? [{
+      key: 'actions', label: '', render: (row) => (
+        <Stack direction="row" spacing={0.5}>
+          {canUpdate && <IconButton size="small" onClick={() => { setEditEmployee(row); setOpenDialog(true); }}><Edit2 size={14} /></IconButton>}
+          {canDelete && <IconButton size="small" color="error" onClick={() => {
+            if (window.confirm(t('common.confirmDelete'))) {
+              deleteMutation.mutate(row.id, { onError: () => {} });
+            }
+          }}><Trash2 size={14} /></IconButton>}
+        </Stack>
+      )
+    }] : []),
   ];
 
   const handleSubmit = async (form) => {
@@ -103,7 +111,7 @@ export default function Employees() {
 
   return (
     <Box>
-      <PageHeader title={t('employees.title')} subtitle={`${pagination.total || employees.length} ${t('employees.total')}`} actionLabel={t('employees.addEmployee')} onAction={() => { setEditEmployee(null); setOpenDialog(true); }} actionIcon={UserPlus} />
+      <PageHeader title={t('employees.title')} subtitle={`${pagination.total || employees.length} ${t('employees.total')}`} {...(canCreate ? { actionLabel: t('employees.addEmployee'), onAction: () => { setEditEmployee(null); setOpenDialog(true); }, actionIcon: UserPlus } : {})} />
 
       <Grid spacing={2.5} sx={{ mb: 3 }}>
         <GridItem xs={6} sm={3}><StatCard title={t('common.total')} value={pagination.total || employees.length} icon={Users} color="primary" /></GridItem>
@@ -135,14 +143,16 @@ export default function Employees() {
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>{emp.position}</Typography>
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>{emp.department}</Typography>
                   <StatusBadge status={emp.status} size="small" />
-                  <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'center', gap: 0.5 }}>
-                    <IconButton size="small" onClick={() => { setEditEmployee(emp); setOpenDialog(true); }}><Edit2 size={14} /></IconButton>
-                    <IconButton size="small" color="error" onClick={() => {
-                      if (window.confirm(t('common.confirmDelete'))) {
-                        deleteMutation.mutate(emp.id, { onError: () => {} });
-                      }
-                    }}><Trash2 size={14} /></IconButton>
-                  </Box>
+                  {(canUpdate || canDelete) && (
+                    <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'center', gap: 0.5 }}>
+                      {canUpdate && <IconButton size="small" onClick={() => { setEditEmployee(emp); setOpenDialog(true); }}><Edit2 size={14} /></IconButton>}
+                      {canDelete && <IconButton size="small" color="error" onClick={() => {
+                        if (window.confirm(t('common.confirmDelete'))) {
+                          deleteMutation.mutate(emp.id, { onError: () => {} });
+                        }
+                      }}><Trash2 size={14} /></IconButton>}
+                    </Box>
+                  )}
                 </Paper>
               </GridItem>
             ))}
@@ -176,7 +186,7 @@ function EmployeeDialog({ open, onClose, edit, t, onSubmit, error }) {
         hireDate: edit.hireDate ? edit.hireDate.slice(0, 10) : '',
         status: edit.status || 'ACTIVE',
         imageFile: null,
-        preview: edit.image ? `${API_BASE}/uploads/${edit.image}` : null,
+        preview: edit.image ? `/api/v1/uploads/${edit.image}` : null,
       });
     } else {
       setForm({ employeeNumber: '', nationalId: '', name: '', email: '', phone: '', position: '', department: '', salary: '', hireDate: '', status: 'ACTIVE', imageFile: null, preview: null });

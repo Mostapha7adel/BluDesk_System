@@ -49,6 +49,7 @@ class ProjectsService {
           include: { employee: true },
         },
         statusHistory: { orderBy: { createdAt: 'desc' } },
+        installments: { orderBy: { date: 'desc' } },
       },
     });
     if (!project) throw new AppError('Project not found', 404);
@@ -190,6 +191,62 @@ class ProjectsService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async updateStatus(id, status, userId) {
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) throw new AppError('Project not found', 404);
+
+    return prisma.project.update({
+      where: { id },
+      data: {
+        status,
+        statusHistory: {
+          create: { toStatus: status, fromStatus: project.status, changedBy: userId },
+        },
+      },
+      include: {
+        assignedEmployees: { include: { employee: true } },
+        statusHistory: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+  }
+
+  async addInstallment(id, data) {
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) throw new AppError('Project not found', 404);
+
+    return prisma.$transaction(async (tx) => {
+      const installment = await tx.paymentInstallment.create({
+        data: { projectId: id, amount: data.amount, date: data.date || new Date(), notes: data.notes },
+      });
+
+      const totalPaid = await tx.paymentInstallment.aggregate({
+        where: { projectId: id },
+        _sum: { amount: true },
+      });
+
+      await tx.project.update({
+        where: { id },
+        data: { remainingAmount: parseFloat(project.totalCost) - parseFloat(totalPaid._sum.amount || 0) },
+      });
+
+      return installment;
+    });
+  }
+
+  async getInstallments(id) {
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) throw new AppError('Project not found', 404);
+
+    const installments = await prisma.paymentInstallment.findMany({
+      where: { projectId: id },
+      orderBy: { date: 'desc' },
+    });
+
+    const totalPaid = installments.reduce((sum, inst) => sum + parseFloat(inst.amount), 0);
+
+    return { installments, totalPaid, remainingAmount: parseFloat(project.totalCost) - totalPaid };
   }
 
   async getStatusHistory(id, query = {}) {

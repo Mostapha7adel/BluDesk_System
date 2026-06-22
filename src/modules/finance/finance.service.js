@@ -102,6 +102,7 @@ class FinanceService {
           amount,
           description: data.description,
           reference: data.reference,
+          recurringType: data.recurringType || 'ONE_TIME',
           date: data.date || new Date(),
           createdBy: userId,
         },
@@ -114,6 +115,47 @@ class FinanceService {
 
       cache.flushAll();
       return txn;
+    });
+  }
+
+  async updateTransaction(id, data, userId) {
+    return prisma.$transaction(async (tx) => {
+      const transaction = await tx.financeTransaction.findUnique({ where: { id } });
+      if (!transaction) throw new AppError('Transaction not found', 404);
+      if (transaction.cancelledAt) throw new AppError('Cannot edit a cancelled transaction', 400);
+
+      const oldType = transaction.type;
+      const oldAmount = parseFloat(transaction.amount);
+      const newType = data.type || oldType;
+      const newAmount = data.amount !== undefined ? parseFloat(data.amount) : oldAmount;
+
+      const oldEffect = (oldType === 'INCOME' || oldType === 'DEPOSIT') ? oldAmount : -oldAmount;
+      const newEffect = (newType === 'INCOME' || newType === 'DEPOSIT') ? newAmount : -newAmount;
+      const balanceDelta = newEffect - oldEffect;
+
+      if (balanceDelta !== 0) {
+        const treasury = await tx.treasury.findUnique({ where: { id: transaction.treasuryId } });
+        if (!treasury) throw new AppError('Treasury not found', 404);
+
+        const newBalance = parseFloat(treasury.balance) + balanceDelta;
+        if (newBalance < 0) throw new AppError('Insufficient balance after update', 400);
+
+        await tx.treasury.update({
+          where: { id: transaction.treasuryId },
+          data: { balance: newBalance },
+        });
+      }
+
+      const updateData = {};
+      if (data.type) updateData.type = data.type;
+      if (data.amount !== undefined) updateData.amount = data.amount;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.reference !== undefined) updateData.reference = data.reference;
+      if (data.date !== undefined) updateData.date = data.date;
+      if (data.recurringType !== undefined) updateData.recurringType = data.recurringType;
+
+      cache.flushAll();
+      return tx.financeTransaction.update({ where: { id }, data: updateData });
     });
   }
 
@@ -152,7 +194,7 @@ class FinanceService {
 
   async getTransactions(query) {
     const { page, limit, skip } = parsePagination(query);
-    const { treasuryId, type, startDate, endDate } = query;
+    const { treasuryId, type, startDate, endDate, includeCancelled } = query;
 
     const where = {};
     if (treasuryId) where.treasuryId = parseInt(treasuryId);
@@ -162,6 +204,7 @@ class FinanceService {
       if (startDate) where.date.gte = new Date(startDate);
       if (endDate) where.date.lte = new Date(endDate);
     }
+    if (includeCancelled !== 'true') where.cancelledAt = null;
 
     const [transactions, total] = await Promise.all([
       prisma.financeTransaction.findMany({
@@ -224,6 +267,7 @@ class FinanceService {
 
   async getFinancialReport(startDate, endDate, query = {}) {
     const { page, limit, skip } = parsePagination(query);
+    const { includeCancelled } = query;
 
     const where = {};
     if (startDate || endDate) {
@@ -231,6 +275,7 @@ class FinanceService {
       if (startDate) where.date.gte = new Date(startDate);
       if (endDate) where.date.lte = new Date(endDate);
     }
+    if (includeCancelled !== 'true') where.cancelledAt = null;
 
     const [transactions, totalTransactions] = await Promise.all([
       prisma.financeTransaction.findMany({

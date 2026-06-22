@@ -13,11 +13,11 @@ const authSlice = createSlice({
   },
   reducers: {
     setCredentials: (state, action) => {
-      const { user, accessToken } = action.payload;
-      state.user = user;
+      const { user, accessToken, permissions } = action.payload;
+      state.user = { ...user, permissions };
       state.accessToken = accessToken;
       state.isAuthenticated = true;
-      sessionStorage.setItem('bluedesk-user', JSON.stringify(user));
+      sessionStorage.setItem('bluedesk-user', JSON.stringify(state.user));
     },
     setAccessToken: (state, action) => {
       state.accessToken = action.payload;

@@ -78,7 +78,7 @@ const MANAGER_PERMISSIONS = [
 // Investor permissions (read-only)
 const INVESTOR_PERMISSIONS = [
   'finance.read', 'finance.generate_report', 'treasury.read',
-  'expenses.read', 'projects.read', 'audit_logs.read',
+  'expenses.read', 'projects.read', 'audit_logs.read', 'employees.read',
 ];
 
 // Accountant permissions
@@ -97,7 +97,7 @@ const HR_PERMISSIONS = [
 
 // Employee permissions
 const EMPLOYEE_PERMISSIONS = [
-  'projects.read', 'internal_projects.read',
+  'projects.read', 'internal_projects.read', 'employees.read',
 ];
 
 const ROLE_PERMISSIONS_MAP = {

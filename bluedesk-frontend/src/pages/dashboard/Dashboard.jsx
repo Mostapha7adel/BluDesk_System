@@ -1,6 +1,6 @@
 import { Box, Typography, Paper, CircularProgress, Stack } from '@mui/material';
 import { Container as Grid, Item as GridItem } from '../../components/ui/Grid';
-import { Users, Briefcase, Wallet, CreditCard, TrendingUp, DollarSign } from 'lucide-react';
+import { Users, Briefcase, Wallet, CreditCard, TrendingUp, Calendar, Clock } from 'lucide-react';
 import StatCard from '../../components/ui/StatCard';
 import RevenueChart from '../../components/charts/RevenueChart';
 import ExpensesChart from '../../components/charts/ExpensesChart';
@@ -11,6 +11,30 @@ import { useEffect, useMemo } from 'react';
 import { useEmployees } from '../../hooks/api';
 import { useProjects, useTransactions, useFinancialReport } from '../../hooks/api';
 
+function getStartOfWeek() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = (day + 1) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - diff);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function isToday(d) {
+  const now = new Date();
+  return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+}
+
+function isThisWeek(d) {
+  return d >= getStartOfWeek();
+}
+
+function isThisMonth(d) {
+  const now = new Date();
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+}
+
 export default function Dashboard() {
   const t = useTranslate();
 
@@ -18,7 +42,7 @@ export default function Dashboard() {
 
   const { data: empData, isLoading: empLoading } = useEmployees({ limit: 100 });
   const { data: projData, isLoading: projLoading } = useProjects({ limit: 100 });
-  const { data: txData, isLoading: txLoading } = useTransactions({ limit: 100 });
+  const { data: txData, isLoading: txLoading } = useTransactions({ limit: 500 });
   const { data: report, isLoading: reportLoading } = useFinancialReport();
 
   const employees = empData?.data || [];
@@ -31,24 +55,39 @@ export default function Dashboard() {
   const totalExpense = summary.totalExpense || finReport.totalExpense || 0;
   const netBalance = summary.netBalance || finReport.netBalance || 0;
 
+  const activeTxns = txns.filter(t => !t.cancelledAt);
+
+  const dailyExpenses = activeTxns
+    .filter(t => t.type === 'EXPENSE' && isToday(new Date(t.date)))
+    .reduce((s, t) => s + parseFloat(t.amount), 0);
+
+  const weeklyExpenses = activeTxns
+    .filter(t => t.type === 'EXPENSE' && isThisWeek(new Date(t.date)))
+    .reduce((s, t) => s + parseFloat(t.amount), 0);
+
+  const monthlyExpenses = activeTxns
+    .filter(t => t.type === 'EXPENSE' && isThisMonth(new Date(t.date)))
+    .reduce((s, t) => s + parseFloat(t.amount), 0);
+
   const activeProjects = projects.filter(p => p.status !== 'COMPLETED' && p.status !== 'CANCELLED');
 
   const stats = [
     { title: t('dashboard.totalEmployees'), value: String(employees.length), icon: Users, color: 'primary', trend: 'up', trendValue: employees.length + ' ' + t('common.total') },
     { title: t('dashboard.activeProjects'), value: String(activeProjects.length), icon: Briefcase, color: 'secondary', trend: 'up', trendValue: activeProjects.length + ' ' + t('common.active') },
     { title: t('dashboard.treasuryBalance'), value: formatCurrency(netBalance), icon: Wallet, color: 'success', trend: 'up' },
-    { title: t('dashboard.monthlyExpenses'), value: formatCurrency(totalExpense), icon: CreditCard, color: 'warning', trend: 'down' },
+    { title: t('dashboard.dailyExpenses'), value: formatCurrency(dailyExpenses), icon: Clock, color: 'warning', trend: 'down' },
+    { title: t('dashboard.weeklyExpenses'), value: formatCurrency(weeklyExpenses), icon: Calendar, color: 'error', trend: 'down' },
+    { title: t('dashboard.monthlyExpenses'), value: formatCurrency(monthlyExpenses), icon: CreditCard, color: 'warning', trend: 'down' },
     { title: t('dashboard.totalRevenue'), value: formatCurrency(totalIncome), icon: TrendingUp, color: 'info', trend: 'up' },
-    { title: t('dashboard.pendingInvoices'), value: '—', icon: DollarSign, color: 'error' },
   ];
 
   const incomeByMonth = {};
   const expenseByMonth = {};
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  txns.forEach((tx) => {
+  activeTxns.forEach((tx) => {
     const d = new Date(tx.date);
     const m = d.getMonth();
-    if (tx.type === 'INCOME') incomeByMonth[m] = (incomeByMonth[m] || 0) + parseFloat(tx.amount);
+    if (tx.type === 'INCOME' || tx.type === 'DEPOSIT') incomeByMonth[m] = (incomeByMonth[m] || 0) + parseFloat(tx.amount);
     if (tx.type === 'EXPENSE') expenseByMonth[m] = (expenseByMonth[m] || 0) + parseFloat(tx.amount);
   });
 
@@ -61,12 +100,12 @@ export default function Dashboard() {
 
   const expenseByCategory = useMemo(() => {
     const cat = {};
-    txns.filter(t => t.type === 'EXPENSE').forEach((tx) => {
-      const c = tx.category || 'Other';
+    activeTxns.filter(t => t.type === 'EXPENSE').forEach((tx) => {
+      const c = tx.description?.split(' - ')[0] || 'Other';
       cat[c] = (cat[c] || 0) + parseFloat(tx.amount);
     });
     return cat;
-  }, [txns]);
+  }, [activeTxns]);
 
   const expensesData = useMemo(() => ({
     labels: Object.keys(expenseByCategory).slice(0, 6),
@@ -103,7 +142,7 @@ export default function Dashboard() {
 
       <Grid spacing={2.5} sx={{ mb: 3 }}>
         {stats.map((stat, i) => (
-          <GridItem xs={12} sm={6} md={4} lg={2} key={i}>
+          <GridItem xs={6} sm={4} md={3} key={i}>
             <StatCard {...stat} />
           </GridItem>
         ))}
