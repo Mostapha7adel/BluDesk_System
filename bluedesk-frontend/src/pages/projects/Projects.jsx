@@ -29,6 +29,7 @@ export default function Projects() {
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [installmentTarget, setInstallmentTarget] = useState(null);
+  const [descriptionTarget, setDescriptionTarget] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
 
   useEffect(() => { document.title = t('projects.title'); }, [t]);
@@ -171,7 +172,7 @@ export default function Projects() {
                       </Box>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{project.clientName}</Typography>
-                    <Box sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 2, maxHeight: 64, overflow: 'hidden' }}>
+                    <Box onClick={() => setDescriptionTarget(project)} sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 2, maxHeight: 64, overflow: 'hidden', cursor: 'pointer', '&:hover': { bgcolor: 'action.selected' } }}>
                       <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, fontSize: 12, wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {project.description || '—'}
                       </Typography>
@@ -227,6 +228,8 @@ export default function Projects() {
       )}
 
       <ProjectDialog open={openDialog} onClose={() => { setOpenDialog(false); setEditProject(null); setError(''); }} edit={editProject} t={t} onSubmit={handleSubmit} error={error} />
+
+      <DescriptionDialog open={!!descriptionTarget} project={descriptionTarget} onClose={() => setDescriptionTarget(null)} t={t} />
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 600 }}>{t('common.confirmDelete')}</DialogTitle>
@@ -345,6 +348,22 @@ function InstallmentDialog({ open, project, onClose, t, onSubmit, error }) {
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.cancel')}</Button>
         <Button variant="contained" sx={{ borderRadius: 2 }} onClick={() => onSubmit(project?.id, form)}>{t('common.add')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function DescriptionDialog({ open, project, onClose, t }) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 600 }}>{project?.name}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body1" sx={{ lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {project?.description || '—'}
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.close')}</Button>
       </DialogActions>
     </Dialog>
   );
