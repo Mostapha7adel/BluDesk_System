@@ -1,6 +1,6 @@
 import { Box, Typography, Paper, CircularProgress, Stack } from '@mui/material';
 import { Container as Grid, Item as GridItem } from '../../components/ui/Grid';
-import { Users, Briefcase, Wallet, CreditCard, TrendingUp, Calendar, Clock } from 'lucide-react';
+import { Users, Briefcase, Wallet, CreditCard, TrendingUp, TrendingDown, Calendar, Clock } from 'lucide-react';
 import StatCard from '../../components/ui/StatCard';
 import RevenueChart from '../../components/charts/RevenueChart';
 import ExpensesChart from '../../components/charts/ExpensesChart';
@@ -69,13 +69,28 @@ export default function Dashboard() {
     .filter(t => t.type === 'EXPENSE' && isThisMonth(new Date(t.date)))
     .reduce((s, t) => s + parseFloat(t.amount), 0);
 
+  const dailyIncome = activeTxns
+    .filter(t => (t.type === 'INCOME' || t.type === 'DEPOSIT') && isToday(new Date(t.date)))
+    .reduce((s, t) => s + parseFloat(t.amount), 0);
+
+  const weeklyIncome = activeTxns
+    .filter(t => (t.type === 'INCOME' || t.type === 'DEPOSIT') && isThisWeek(new Date(t.date)))
+    .reduce((s, t) => s + parseFloat(t.amount), 0);
+
+  const monthlyIncome = activeTxns
+    .filter(t => (t.type === 'INCOME' || t.type === 'DEPOSIT') && isThisMonth(new Date(t.date)))
+    .reduce((s, t) => s + parseFloat(t.amount), 0);
+
   const activeProjects = projects.filter(p => p.status !== 'COMPLETED' && p.status !== 'CANCELLED');
 
   const stats = [
     { title: t('dashboard.totalEmployees'), value: String(employees.length), icon: Users, color: 'primary', trend: 'up', trendValue: employees.length + ' ' + t('common.total') },
     { title: t('dashboard.activeProjects'), value: String(activeProjects.length), icon: Briefcase, color: 'secondary', trend: 'up', trendValue: activeProjects.length + ' ' + t('common.active') },
     { title: t('dashboard.treasuryBalance'), value: formatCurrency(netBalance), icon: Wallet, color: 'success', trend: 'up' },
-    { title: t('dashboard.dailyExpenses'), value: formatCurrency(dailyExpenses), icon: Clock, color: 'warning', trend: 'down' },
+    { title: t('dashboard.dailyIncome'), value: formatCurrency(dailyIncome), icon: TrendingUp, color: 'info', trend: 'up' },
+    { title: t('dashboard.weeklyIncome'), value: formatCurrency(weeklyIncome), icon: Calendar, color: 'info', trend: 'up' },
+    { title: t('dashboard.monthlyIncome'), value: formatCurrency(monthlyIncome), icon: CreditCard, color: 'info', trend: 'up' },
+    { title: t('dashboard.dailyExpenses'), value: formatCurrency(dailyExpenses), icon: TrendingDown, color: 'warning', trend: 'down' },
     { title: t('dashboard.weeklyExpenses'), value: formatCurrency(weeklyExpenses), icon: Calendar, color: 'error', trend: 'down' },
     { title: t('dashboard.monthlyExpenses'), value: formatCurrency(monthlyExpenses), icon: CreditCard, color: 'warning', trend: 'down' },
     { title: t('dashboard.totalRevenue'), value: formatCurrency(totalIncome), icon: TrendingUp, color: 'info', trend: 'up' },
