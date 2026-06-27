@@ -67,8 +67,26 @@ class ProjectsController {
 
   async addInstallment(req, res, next) {
     try {
-      const installment = await projectsService.addInstallment(parseInt(req.params.id), req.body);
+      const installment = await projectsService.addInstallment(parseInt(req.params.id), req.body, req.user?.id);
       return ApiResponse.created(res, installment, 'Payment installment added successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateInstallment(req, res, next) {
+    try {
+      const installment = await projectsService.updateInstallment(parseInt(req.params.id), parseInt(req.params.installmentId), req.body, req.user?.id);
+      return ApiResponse.success(res, installment, 'Installment updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteInstallment(req, res, next) {
+    try {
+      const result = await projectsService.deleteInstallment(parseInt(req.params.id), parseInt(req.params.installmentId), req.user?.id);
+      return ApiResponse.success(res, result, 'Installment deleted successfully');
     } catch (error) {
       next(error);
     }

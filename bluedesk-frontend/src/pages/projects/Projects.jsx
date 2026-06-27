@@ -92,6 +92,30 @@ export default function Projects() {
     }
   };
 
+  const handleUpdateInstallment = async (projectId, installmentId, form) => {
+    try {
+      await api.put(`/projects/${projectId}/installments/${installmentId}`, {
+        amount: parseFloat(form.amount),
+        date: form.date ? `${form.date}T00:00:00.000Z` : undefined,
+        notes: form.notes || '',
+      });
+      refetch();
+      setInstallmentTarget(null);
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || t('common.error'));
+    }
+  };
+
+  const handleDeleteInstallment = async (projectId, installmentId) => {
+    if (!window.confirm(t('common.confirmDelete'))) return;
+    try {
+      await api.delete(`/projects/${projectId}/installments/${installmentId}`);
+      refetch();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || t('common.error'));
+    }
+  };
+
   const handleDelete = async () => {
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
@@ -242,7 +266,7 @@ export default function Projects() {
         </DialogActions>
       </Dialog>
 
-      <InstallmentDialog open={!!installmentTarget} project={installmentTarget} onClose={() => setInstallmentTarget(null)} t={t} onSubmit={handleAddInstallment} error={error} />
+      <InstallmentDialog open={!!installmentTarget} project={installmentTarget} onClose={() => setInstallmentTarget(null)} t={t} onSubmit={handleAddInstallment} onUpdate={handleUpdateInstallment} onDelete={handleDeleteInstallment} canUpdate={canUpdate} canDelete={canDelete} error={error} />
     </Box>
   );
 }
@@ -298,15 +322,19 @@ function ProjectDialog({ open, onClose, edit, t, onSubmit, error }) {
   );
 }
 
-function InstallmentDialog({ open, project, onClose, t, onSubmit, error }) {
+function InstallmentDialog({ open, project, onClose, t, onSubmit, onUpdate, onDelete, canUpdate, canDelete, error }) {
   const [form, setForm] = useState({ amount: '', date: new Date().toISOString().slice(0, 10), notes: '' });
   const [installments, setInstallments] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [editInstId, setEditInstId] = useState(null);
+  const [editForm, setEditForm] = useState({ amount: '', date: '', notes: '' });
   const handleChange = (f) => (e) => setForm({ ...form, [f]: e.target.value });
+  const handleEditChange = (f) => (e) => setEditForm({ ...editForm, [f]: e.target.value });
 
   useEffect(() => {
     if (open) {
       setForm({ amount: '', date: new Date().toISOString().slice(0, 10), notes: '' });
+      setEditInstId(null);
       setLoadingHistory(true);
       api.get(`/projects/${project.id}/installments`).then(res => {
         setInstallments(res.data?.data?.installments || []);
@@ -314,30 +342,68 @@ function InstallmentDialog({ open, project, onClose, t, onSubmit, error }) {
     }
   }, [open, project]);
 
+  const startEdit = (inst) => {
+    setEditInstId(inst.id);
+    setEditForm({
+      amount: inst.amount?.toString() || '',
+      date: inst.date ? inst.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      notes: inst.notes || '',
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditInstId(null);
+    setEditForm({ amount: '', date: '', notes: '' });
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ fontWeight: 600 }}>{t('projects.addPayment')} — {project?.name}</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
+
           <Box sx={{ display: 'flex', gap: 2 }}>
             <TextField label={t('finance.amount')} type="number" size="small" fullWidth value={form.amount} onChange={handleChange('amount')} />
             <TextField label={t('finance.date')} type="date" size="small" fullWidth slotProps={{ inputLabel: { shrink: true } }} value={form.date} onChange={handleChange('date')} />
           </Box>
           <TextField label={t('salaries.notes')} size="small" fullWidth multiline rows={2} value={form.notes} onChange={handleChange('notes')} />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button variant="contained" size="small" sx={{ borderRadius: 2 }} onClick={() => onSubmit(project?.id, form)}>{t('common.add')}</Button>
+          </Box>
 
           {installments.length > 0 && (
             <Box>
               <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>{t('projects.paymentHistory')}</Typography>
-              <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+              <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
                 {installments.map((inst, i) => (
-                  <Box key={inst.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.8, px: 1.5, borderRadius: 1, bgcolor: i % 2 === 0 ? 'action.hover' : 'transparent' }}>
-                    <Box>
-                      <Typography variant="body2" fontWeight={500}>{formatCurrency(parseFloat(inst.amount))}</Typography>
-                      <Typography variant="caption" color="text.secondary">{formatDateTime(inst.createdAt)}</Typography>
-                      {inst.notes && <Typography variant="caption" display="block" color="text.secondary" sx={{ fontStyle: 'italic' }}>{inst.notes}</Typography>}
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">{formatDate(inst.date)}</Typography>
+                  <Box key={inst.id} sx={{ py: 1, px: 1.5, borderRadius: 1, bgcolor: i % 2 === 0 ? 'action.hover' : 'transparent' }}>
+                    {editInstId === inst.id ? (
+                      <Stack spacing={1.5}>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <TextField label={t('finance.amount')} type="number" size="small" fullWidth value={editForm.amount} onChange={handleEditChange('amount')} />
+                          <TextField label={t('finance.date')} type="date" size="small" fullWidth slotProps={{ inputLabel: { shrink: true } }} value={editForm.date} onChange={handleEditChange('date')} />
+                        </Box>
+                        <TextField label={t('salaries.notes')} size="small" fullWidth multiline rows={1} value={editForm.notes} onChange={handleEditChange('notes')} />
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                          <Button size="small" variant="outlined" sx={{ borderRadius: 2 }} onClick={cancelEdit}>{t('common.cancel')}</Button>
+                          <Button size="small" variant="contained" sx={{ borderRadius: 2 }} onClick={() => { onUpdate(project?.id, inst.id, editForm); cancelEdit(); }}>{t('common.save')}</Button>
+                        </Box>
+                      </Stack>
+                    ) : (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box>
+                          <Typography variant="body2" fontWeight={500}>{formatCurrency(parseFloat(inst.amount))}</Typography>
+                          <Typography variant="caption" color="text.secondary">{formatDateTime(inst.createdAt)}</Typography>
+                          {inst.notes && <Typography variant="caption" display="block" color="text.secondary" sx={{ fontStyle: 'italic' }}>{inst.notes}</Typography>}
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="caption" color="text.secondary">{formatDate(inst.date)}</Typography>
+                          {canUpdate && <IconButton size="small" onClick={() => startEdit(inst)}><Edit2 size={14} /></IconButton>}
+                          {canDelete && <IconButton size="small" color="error" onClick={() => onDelete(project?.id, inst.id)}><Trash2 size={14} /></IconButton>}
+                        </Box>
+                      </Box>
+                    )}
                   </Box>
                 ))}
               </Box>
@@ -346,8 +412,7 @@ function InstallmentDialog({ open, project, onClose, t, onSubmit, error }) {
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.cancel')}</Button>
-        <Button variant="contained" sx={{ borderRadius: 2 }} onClick={() => onSubmit(project?.id, form)}>{t('common.add')}</Button>
+        <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>{t('common.close')}</Button>
       </DialogActions>
     </Dialog>
   );

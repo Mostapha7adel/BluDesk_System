@@ -212,7 +212,7 @@ class ProjectsService {
     });
   }
 
-  async addInstallment(id, data) {
+  async addInstallment(id, data, userId) {
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) throw new AppError('Project not found', 404);
 
@@ -231,7 +231,142 @@ class ProjectsService {
         data: { remainingAmount: parseFloat(project.totalCost) - parseFloat(totalPaid._sum.amount || 0) },
       });
 
+      let treasury = await tx.treasury.findFirst({ where: { isActive: true } });
+      if (!treasury) {
+        treasury = await tx.treasury.create({
+          data: { name: 'Main Treasury', balance: 0, isActive: true },
+        });
+      }
+
+      const ref = `PROJ-INV-${id}-${installment.id}`;
+      await tx.financeTransaction.create({
+        data: {
+          treasuryId: treasury.id,
+          type: 'DEPOSIT',
+          amount: data.amount,
+          description: `Project payment - ${project.name}${data.notes ? ' - ' + data.notes : ''}`,
+          reference: ref,
+          date: data.date || new Date(),
+          recurringType: 'ONE_TIME',
+          createdBy: userId || 1,
+        },
+      });
+
+      await tx.treasury.update({
+        where: { id: treasury.id },
+        data: { balance: { increment: parseFloat(data.amount) } },
+      });
+
       return installment;
+    });
+  }
+
+  async updateInstallment(id, installmentId, data, userId) {
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) throw new AppError('Project not found', 404);
+
+    const installment = await prisma.paymentInstallment.findUnique({ where: { id: installmentId } });
+    if (!installment) throw new AppError('Installment not found', 404);
+
+    const oldAmount = parseFloat(installment.amount);
+    const newAmount = parseFloat(data.amount);
+    const delta = newAmount - oldAmount;
+
+    return prisma.$transaction(async (tx) => {
+      await tx.paymentInstallment.update({
+        where: { id: installmentId },
+        data: { amount: newAmount, date: data.date || installment.date, notes: data.notes !== undefined ? data.notes : installment.notes },
+      });
+
+      const totalPaid = await tx.paymentInstallment.aggregate({
+        where: { projectId: id },
+        _sum: { amount: true },
+      });
+
+      await tx.project.update({
+        where: { id },
+        data: { remainingAmount: parseFloat(project.totalCost) - parseFloat(totalPaid._sum.amount || 0) },
+      });
+
+      let treasury = await tx.treasury.findFirst({ where: { isActive: true } });
+      if (!treasury) {
+        treasury = await tx.treasury.create({
+          data: { name: 'Main Treasury', balance: 0, isActive: true },
+        });
+      }
+
+      const ref = `PROJ-INV-${id}-${installmentId}-ADJ`;
+      await tx.financeTransaction.create({
+        data: {
+          treasuryId: treasury.id,
+          type: delta >= 0 ? 'DEPOSIT' : 'EXPENSE',
+          amount: Math.abs(delta),
+          description: `${delta >= 0 ? 'Increase' : 'Decrease'} project payment - ${project.name} (${oldAmount} → ${newAmount})`,
+          reference: ref,
+          date: new Date(),
+          recurringType: 'ONE_TIME',
+          createdBy: userId || 1,
+        },
+      });
+
+      await tx.treasury.update({
+        where: { id: treasury.id },
+        data: { balance: { increment: delta } },
+      });
+
+      return { ...installment, amount: newAmount };
+    });
+  }
+
+  async deleteInstallment(id, installmentId, userId) {
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) throw new AppError('Project not found', 404);
+
+    const installment = await prisma.paymentInstallment.findUnique({ where: { id: installmentId } });
+    if (!installment) throw new AppError('Installment not found', 404);
+
+    const amount = parseFloat(installment.amount);
+
+    return prisma.$transaction(async (tx) => {
+      await tx.paymentInstallment.delete({ where: { id: installmentId } });
+
+      const totalPaid = await tx.paymentInstallment.aggregate({
+        where: { projectId: id },
+        _sum: { amount: true },
+      });
+
+      await tx.project.update({
+        where: { id },
+        data: { remainingAmount: parseFloat(project.totalCost) - parseFloat(totalPaid._sum.amount || 0) },
+      });
+
+      let treasury = await tx.treasury.findFirst({ where: { isActive: true } });
+      if (!treasury) {
+        treasury = await tx.treasury.create({
+          data: { name: 'Main Treasury', balance: 0, isActive: true },
+        });
+      }
+
+      const ref = `PROJ-INV-${id}-${installmentId}-DEL`;
+      await tx.financeTransaction.create({
+        data: {
+          treasuryId: treasury.id,
+          type: 'EXPENSE',
+          amount,
+          description: `Reversed project payment - ${project.name}`,
+          reference: ref,
+          date: new Date(),
+          recurringType: 'ONE_TIME',
+          createdBy: userId || 1,
+        },
+      });
+
+      await tx.treasury.update({
+        where: { id: treasury.id },
+        data: { balance: { increment: -amount } },
+      });
+
+      return { message: 'Installment deleted' };
     });
   }
 
