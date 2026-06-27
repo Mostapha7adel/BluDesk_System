@@ -41,4 +41,9 @@ const paramId = Joi.object({
   id: Joi.number().integer().positive().required(),
 });
 
-module.exports = { createProjectSchema, updateProjectSchema, paramId };
+const paramIdWithInstallment = Joi.object({
+  id: Joi.number().integer().positive().required(),
+  installmentId: Joi.number().integer().positive().required(),
+});
+
+module.exports = { createProjectSchema, updateProjectSchema, paramId, paramIdWithInstallment };

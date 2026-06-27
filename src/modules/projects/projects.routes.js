@@ -5,7 +5,7 @@ const { validate, validateParams } = require('../../middlewares/validate');
 const authenticate = require('../../middlewares/auth');
 const { authorize } = require('../../middlewares/rbac');
 const auditLog = require('../../middlewares/audit');
-const { createProjectSchema, updateProjectSchema, paramId } = require('../../validations/project');
+const { createProjectSchema, updateProjectSchema, paramId, paramIdWithInstallment } = require('../../validations/project');
 
 router.use(authenticate);
 
@@ -24,7 +24,7 @@ router.get('/:id/status-history', validateParams(paramId), authorize('projects.r
 router.patch('/:id/status', validateParams(paramId), authorize('projects.update'), validate(Joi.object({ status: Joi.string().valid('NEW', 'ANALYSIS', 'DESIGN', 'DEVELOPMENT', 'TESTING', 'COMPLETED', 'CANCELLED').required() })), auditLog('UPDATE'), projectsController.updateStatus);
 router.post('/:id/installments', validateParams(paramId), authorize('projects.update'), validate(Joi.object({ amount: Joi.number().positive().precision(2).required(), date: Joi.date().iso(), notes: Joi.string().max(500).allow('', null) })), auditLog('CREATE'), projectsController.addInstallment);
 router.get('/:id/installments', validateParams(paramId), authorize('projects.read'), projectsController.getInstallments);
-router.put('/:id/installments/:installmentId', validateParams(paramId), authorize('projects.update'), validate(Joi.object({ amount: Joi.number().positive().precision(2).required(), date: Joi.date().iso(), notes: Joi.string().max(500).allow('', null) })), auditLog('UPDATE'), projectsController.updateInstallment);
-router.delete('/:id/installments/:installmentId', validateParams(paramId), authorize('projects.update'), auditLog('DELETE'), projectsController.deleteInstallment);
+router.put('/:id/installments/:installmentId', validateParams(paramIdWithInstallment), authorize('projects.update'), validate(Joi.object({ amount: Joi.number().positive().precision(2).required(), date: Joi.date().iso(), notes: Joi.string().max(500).allow('', null) })), auditLog('UPDATE'), projectsController.updateInstallment);
+router.delete('/:id/installments/:installmentId', validateParams(paramIdWithInstallment), authorize('projects.update'), auditLog('DELETE'), projectsController.deleteInstallment);
 
 module.exports = router;
